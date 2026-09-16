@@ -19,6 +19,7 @@ import { RoomSession } from "../features/room/model/roomSession.js";
 import { MediaController } from "../features/room/model/mediaController.js";
 import { NegotiationController } from "../features/room/model/negotiationController.js";
 import { PeerConnectionManager } from "../features/room/model/peerConnectionManager.js";
+import VideoGrid from "../features/room/ui/VideoGrid.jsx";
 
 export default function RoomPage({ roomId, initialName = "" }) {
   const [name, setName] = useState(initialName);
@@ -26,6 +27,8 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const [sessionState, setSessionState] = useState({ status: "idle" });
   const [messageText, setMessageText] = useState("");
   const [peerFailures, setPeerFailures] = useState({});
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState({});
   const [participants, dispatchParticipants] = useReducer(
     participantsReducer,
     initialParticipantsState,
@@ -47,15 +50,15 @@ export default function RoomPage({ roomId, initialName = "" }) {
         participants: state.participants,
       });
       dispatchMessages({ type: "snapshot", messages: state.messages });
-        if (globalThis.RTCPeerConnection) {
-          peerManagerRef.current = new PeerConnectionManager({
-            onIceCandidate: (participantId, candidate) => {
-              void sessionRef.current?.sendSignal("signal:ice", {
-                targetId: participantId,
-                candidate,
-              });
-            },
-            onPeerState: (participantId, connectionState) => {
+      if (globalThis.RTCPeerConnection) {
+        peerManagerRef.current = new PeerConnectionManager({
+          onIceCandidate: (participantId, candidate) => {
+            void sessionRef.current?.sendSignal("signal:ice", {
+              targetId: participantId,
+              candidate,
+            });
+          },
+          onPeerState: (participantId, connectionState) => {
             if (connectionState === "failed")
               setPeerFailures((current) => ({
                 ...current,
@@ -68,6 +71,11 @@ export default function RoomPage({ roomId, initialName = "" }) {
                 return next;
               });
           },
+          onRemoteStream: (participantId, stream) =>
+            setRemoteStreams((current) => ({
+              ...current,
+              [participantId]: stream,
+            })),
         });
         negotiationRef.current = new NegotiationController({
           session: sessionRef.current,
@@ -96,13 +104,15 @@ export default function RoomPage({ roomId, initialName = "" }) {
       void negotiationRef.current?.handleOffer(state);
     if (state.status === "signal-answer")
       void negotiationRef.current?.handleAnswer(state);
-    if (state.status === "signal-ice") void negotiationRef.current?.handleIce(state);
+    if (state.status === "signal-ice")
+      void negotiationRef.current?.handleIce(state);
   };
   const join = async () => {
     const result = validateDisplayName(name);
     if (!result.ok) return setError(result.message);
     if (!mediaRef.current) mediaRef.current = new MediaController();
     const media = await mediaRef.current.acquire();
+    setLocalStream(media.stream);
     setError(media.error ?? "");
     if (!sessionRef.current)
       sessionRef.current = new RoomSession({ onState: handleState });
@@ -138,9 +148,16 @@ export default function RoomPage({ roomId, initialName = "" }) {
         <span role="alert">{sessionState.error}</span>
       )}
       <ParticipantList participants={participantsList(participants)} />
+      <VideoGrid
+        participants={participantsList(participants)}
+        selfId={participants.selfId}
+        localStream={localStream}
+        remoteStreams={remoteStreams}
+      />
       {Object.entries(peerFailures).map(([participantId, message]) => (
         <p key={participantId} role="alert">
-          {participants.byId[participantId]?.displayName ?? "Участник"}: {message}
+          {participants.byId[participantId]?.displayName ?? "Участник"}:{" "}
+          {message}
         </p>
       ))}
       {visibleMessages.length > 0 && (
