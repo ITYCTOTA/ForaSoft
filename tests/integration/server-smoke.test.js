@@ -95,4 +95,23 @@ describe('server composition root', () => {
       socket.disconnect()
     }
   })
+
+  it('relays SDP and ICE only to the addressed participant', async () => {
+    const sender = connectTestSocket(testServer.url)
+    const target = connectTestSocket(testServer.url)
+    try {
+      const senderJoin = await new Promise((resolve) => sender.emit('room:join', { roomId: 'signal-room', displayName: 'Отправитель' }, resolve))
+      const targetJoin = await new Promise((resolve) => target.emit('room:join', { roomId: 'signal-room', displayName: 'Получатель' }, resolve))
+      const offer = new Promise((resolve) => target.once('signal:offer', resolve))
+      const answer = { type: 'answer', sdp: 'v=0' }
+      const sent = await new Promise((resolve) => sender.emit('signal:offer', { targetId: targetJoin.self.id, sdp: { type: 'offer', sdp: 'v=0' }, fromId: 'spoof' }, resolve))
+      expect(sent).toEqual({ ok: true })
+      await expect(offer).resolves.toEqual({ fromId: senderJoin.self.id, sdp: { type: 'offer', sdp: 'v=0' } })
+      const invalid = await new Promise((resolve) => sender.emit('signal:answer', { targetId: 'unknown', sdp: answer }, resolve))
+      expect(invalid.code).toBe('INVALID_SIGNAL_TARGET')
+    } finally {
+      sender.disconnect()
+      target.disconnect()
+    }
+  })
 })

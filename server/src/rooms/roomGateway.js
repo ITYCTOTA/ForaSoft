@@ -23,6 +23,9 @@ export class RoomGateway {
       socket.on(SOCKET_EVENTS.CHAT_SEND, (payload, acknowledge) => {
         this.sendChat(socket, payload, acknowledge)
       })
+      for (const event of [SOCKET_EVENTS.SIGNAL_OFFER, SOCKET_EVENTS.SIGNAL_ANSWER, SOCKET_EVENTS.SIGNAL_ICE]) {
+        socket.on(event, (payload, acknowledge) => this.relaySignal(socket, event, payload, acknowledge))
+      }
     })
     return this
   }
@@ -92,4 +95,33 @@ export class RoomGateway {
     this.io.to(binding.roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, message)
     acknowledge({ ok: true, message })
   }
+
+  relaySignal(socket, event, payload, acknowledge = () => {}) {
+    const binding = this.bindings.get(socket.id)
+    const targetId = payload?.targetId
+    const targetSocketId = binding && this.participantSockets.get(targetId)
+    const targetBinding = targetSocketId && this.bindings.get(targetSocketId)
+    const validTarget = targetBinding && targetBinding.roomId === binding.roomId && targetId !== binding.participantId
+    const validPayload = event === SOCKET_EVENTS.SIGNAL_ICE
+      ? isIceCandidate(payload?.candidate)
+      : isSessionDescription(payload?.sdp, event === SOCKET_EVENTS.SIGNAL_OFFER ? 'offer' : 'answer')
+    if (!binding || !validTarget || !validPayload) {
+      return acknowledge({ ok: false, code: ERROR_CODES.INVALID_SIGNAL_TARGET, message: 'Не удалось установить медиасоединение с этим участником.' })
+    }
+    const forwarded = event === SOCKET_EVENTS.SIGNAL_ICE
+      ? { fromId: binding.participantId, candidate: payload.candidate }
+      : { fromId: binding.participantId, sdp: payload.sdp }
+    this.io.to(targetSocketId).emit(event, forwarded)
+    acknowledge({ ok: true })
+  }
+}
+
+function isSessionDescription(value, expectedType) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && value.type === expectedType && typeof value.sdp === 'string' && value.sdp.length > 0
+}
+
+function isIceCandidate(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && typeof value.candidate === 'string'
 }
