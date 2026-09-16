@@ -26,5 +26,8 @@ input { border: 1px solid #65708a; border-radius: .35rem; padding: .7rem; font: 
 button { border: 0; border-radius: .35rem; padding: .7rem 1rem; cursor: pointer; font: inherit; }
 .join-row { display: flex; gap: .5rem; }
 .join-row input { flex: 1; }
+.join-block { width: 100%; }
+.action-divider { display: flex; align-items: center; gap: .75rem; width: 100%; color: #aab3c8; }
+.action-divider::before, .action-divider::after { content: ''; flex: 1; border-top: 1px solid #3f4a63; }
 .field-error { color: #ff9f9f; }
 .invite-url { overflow-wrap: anywhere; font-size: .9rem; }

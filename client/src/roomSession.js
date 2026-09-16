@@ -1,0 +1,54 @@
+import { io } from 'socket.io-client'
+
+import { ERROR_CODES, UI_MESSAGES } from '@video-chat-room/shared'
+
+export class RoomSession {
+  constructor({ socketFactory = io, onState = () => {} } = {}) {
+    this.socket = socketFactory({ autoConnect: false, reconnection: false })
+    this.onState = onState
+    this.attempt = 0
+    this.bound = false
+    this.suppressDisconnect = false
+  }
+
+  join({ roomId, displayName }) {
+    const attempt = ++this.attempt
+    this.suppressDisconnect = false
+    this.#subscribe()
+    return new Promise((resolve) => {
+      let timer
+      const finish = (result) => {
+        if (attempt !== this.attempt) return
+        clearTimeout(timer)
+        if (!result.ok) {
+          this.suppressDisconnect = true
+          this.socket.disconnect()
+          this.onState({ status: 'error', error: result.message, code: result.code })
+        } else this.onState({ status: 'joined', ...result })
+        resolve(result)
+      }
+      const emitJoin = () => this.socket.emit('room:join', { roomId, displayName }, finish)
+      this.socket.once('connect', emitJoin)
+      this.socket.once('connect_error', () => finish({ ok: false, code: 'SERVER_UNAVAILABLE', message: UI_MESSAGES.SERVER_DISCONNECTED }))
+      timer = setTimeout(() => finish({ ok: false, code: 'SERVER_UNAVAILABLE', message: UI_MESSAGES.SERVER_DISCONNECTED }), 5_000)
+      this.socket.connect()
+    })
+  }
+
+  leave() {
+    this.attempt += 1
+    if (this.socket.connected) this.socket.emit('room:leave', {}, () => this.socket.disconnect())
+    else this.socket.disconnect()
+    this.onState({ status: 'idle' })
+  }
+
+  #subscribe() {
+    if (this.bound) return
+    this.bound = true
+    this.socket.on('disconnect', () => {
+      if (!this.suppressDisconnect) this.onState({ status: 'disconnected', error: UI_MESSAGES.SERVER_DISCONNECTED })
+    })
+  }
+}
+
+export { ERROR_CODES }

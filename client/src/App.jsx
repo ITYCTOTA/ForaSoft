@@ -1,7 +1,9 @@
 /* eslint-disable no-unused-vars */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { validateDisplayName, validateRoomId } from '@video-chat-room/shared'
+
+import { RoomSession } from './roomSession.js'
 
 function roomIdFromPath() {
   const match = window.location.pathname.match(/^\/room\/([^/]+)$/)
@@ -14,14 +16,18 @@ function navigate(path) {
 }
 
 export default function App() {
-  const [path, setPath] = useState(window.location.pathname)
+  const [route, setRoute] = useState({ path: window.location.pathname, initialName: '' })
   const roomId = roomIdFromPath()
   useEffect(() => {
-    const refresh = () => setPath(window.location.pathname)
+    const refresh = () => setRoute({ path: window.location.pathname, initialName: '' })
     window.addEventListener('popstate', refresh)
     return () => window.removeEventListener('popstate', refresh)
   }, [])
-  return roomId ? <RoomLanding roomId={roomId} /> : <HomePage onNavigate={navigate} />
+  const goTo = (nextPath, initialName = '') => {
+    navigate(nextPath)
+    setRoute({ path: nextPath, initialName })
+  }
+  return roomId ? <RoomLanding roomId={roomId} initialName={route.initialName} /> : <HomePage onNavigate={goTo} />
 }
 
 function NameField({ value, onChange, error }) {
@@ -41,24 +47,31 @@ function HomePage({ onNavigate }) {
     const id = create ? crypto.randomUUID() : roomId.trim()
     const roomResult = validateRoomId(id)
     if (!roomResult.ok) return setError(roomResult.message)
-    onNavigate(`/room/${encodeURIComponent(roomResult.value)}`)
+    onNavigate(`/room/${encodeURIComponent(roomResult.value)}`, nameResult.value)
   }
   return <main className="app-shell card">
     <h1>Видеочат-комната</h1>
-    <p>Создайте комнату или войдите по ссылке.</p>
+    <p>Введите имя и выберите действие.</p>
     <NameField value={name} onChange={(value) => { setName(value); setError('') }} error={error} />
-    <button type="button" onClick={() => submit(true)}>Создать комнату</button>
-    <div className="join-row">
-      <input aria-label="Идентификатор комнаты" placeholder="Идентификатор комнаты" value={roomId} onChange={(event) => setRoomId(event.target.value)} />
-      <button type="button" onClick={() => submit(false)}>Войти</button>
+    <div className="join-block">
+      <label className="field">ID комнаты
+        <div className="join-row">
+          <input aria-label="Идентификатор комнаты" placeholder="Введите ID комнаты" value={roomId} onChange={(event) => setRoomId(event.target.value)} />
+          <button type="button" onClick={() => submit(false)}>Войти</button>
+        </div>
+      </label>
     </div>
+    <div className="action-divider"><span>или</span></div>
+    <button type="button" onClick={() => submit(true)}>Создать комнату</button>
   </main>
 }
 
-function RoomLanding({ roomId }) {
-  const [name, setName] = useState('')
+function RoomLanding({ roomId, initialName = '' }) {
+  const [name, setName] = useState(initialName)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [sessionState, setSessionState] = useState({ status: 'idle' })
+  const sessionRef = useRef(null)
   const inviteUrl = window.location.href
   const copyInvite = async () => {
     try {
@@ -83,6 +96,8 @@ function RoomLanding({ roomId }) {
     const result = validateDisplayName(name)
     if (!result.ok) return setError(result.message)
     setError('')
+    if (!sessionRef.current) sessionRef.current = new RoomSession({ onState: setSessionState })
+    sessionRef.current.join({ roomId, displayName: result.value })
   }
   return <main className="app-shell card">
     <h1>Комната</h1>
@@ -91,6 +106,8 @@ function RoomLanding({ roomId }) {
     {copied && <span role="status">Ссылка скопирована.</span>}
     <NameField value={name} onChange={(value) => { setName(value); setError('') }} error={error} />
     <button type="button" onClick={join}>Войти</button>
+    {sessionState.status === 'joined' && <span role="status">Вы вошли в комнату.</span>}
+    {sessionState.status === 'disconnected' && <span role="alert">{sessionState.error}</span>}
     <small>Идентификатор комнаты: {roomId}</small>
   </main>
 }
