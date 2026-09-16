@@ -5,6 +5,9 @@ import path from 'node:path'
 import express from 'express'
 import { Server } from 'socket.io'
 
+import { RoomGateway } from './rooms/roomGateway.js'
+import { RoomRegistry } from './rooms/roomRegistry.js'
+
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 export function getRuntimeConfig(env = process.env) {
@@ -40,7 +43,9 @@ export function createHttpServer(options = {}) {
   const io = new Server(httpServer, {
     cors: { origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)) },
   })
-  return { app, config, httpServer, io }
+  const registry = new RoomRegistry()
+  const gateway = new RoomGateway({ io, registry }).register()
+  return { app, config, httpServer, io, registry, gateway }
 }
 
 export function startServer(options = {}) {
