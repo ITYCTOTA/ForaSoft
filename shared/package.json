@@ -10,7 +10,9 @@
     ".": "./src/index.js"
   },
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:unit": "vitest run --config vitest.config.js",
+    "test:unit:coverage": "vitest run --config vitest.config.js --coverage"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

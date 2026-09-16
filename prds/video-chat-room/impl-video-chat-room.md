@@ -42,7 +42,7 @@
   - Готово, когда: Один содержательный smoke проверяет запуск приложения; серверы, sockets и browser contexts завершаются после теста. Покрытие собирается отдельно для server/client.
   - _Requirements: PRD §7. Design: §11._
 
-- [ ] 3. Контракты участников, сообщений и Socket.io
+- [x] 3. Контракты участников, сообщений и Socket.io
   - Зафиксировать JavaScript/JSDoc-модели Participant, Room, UserMessage и SystemMessage, названия событий, acknowledgement и ошибки. Различать доменный UUID и socket.id; описать сериализацию Map в массив.
   - Область: Backend / Frontend. Оценка: 0,5 дн. После: №1, №2.
   - Готово, когда: Contract tests принимают оба варианта сообщений, отклоняют смешанные структуры, null-автора и лишний Participant.socketId; системный автор не занимает слот.
