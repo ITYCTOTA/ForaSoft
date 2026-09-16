@@ -7,7 +7,7 @@
 | PRD | [prd-video-chat-room.md](../../prd-video-chat-room.md), v1.0 |
 | TDD | [design-video-chat-room-v4.md](design-video-chat-room-v4.md), v4.0 — текущая редакция файла |
 | Правила | [prd-tasks.mdc](../../prd-tasks.mdc) |
-| Статус | В работе; задачи 1–6 выполнены |
+| Статус | В работе; задачи 1–7 выполнены |
 
 ## Как выполнять план
 
@@ -66,7 +66,7 @@
   - Готово, когда: На записи 501 удаляется старейшая; порядок серверный, все варианты учитываются в лимите. Снимки имени доступны после удаления участника; snapshot не разделяет изменяемый массив с реестром.
   - _Requirements: F-12, F-13, F-14, F-15; PRD §4 п.21, п.22, п.23, п.25. Design: §5, §7, §9, §14._
 
-- [ ] 7. HTTP/Socket.io composition root и конфигурация
+- [x] 7. HTTP/Socket.io composition root и конфигурация
   - Создать общий HTTP-сервер, подключить Socket.io, /healthz, production-статику и SPA fallback для /room/:roomId. Читать PORT, PUBLIC_ORIGIN, STUN_URL, NODE_ENV и LOG_LEVEL; передавать браузеру только публичную STUN-конфигурацию.
   - Область: Backend / DevOps. Оценка: 0,5 дн. После: №1, №4.
   - Готово, когда: Сервер слушает 0.0.0.0:PORT, health возвращает 200, прямой запрос invite URL возвращает SPA; /socket.io/ не перехватывается fallback.

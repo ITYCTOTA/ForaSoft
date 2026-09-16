@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { connectTestSocket, startTestServer } from './fixtures/server.js'
 
-describe('server scaffold', () => {
+describe('server composition root', () => {
   let testServer
 
   beforeAll(async () => {
@@ -15,11 +15,11 @@ describe('server scaffold', () => {
     await testServer.close()
   })
 
-  it('serves the server scaffold from a free port', async () => {
-    const response = await fetch(testServer.url)
+  it('serves health from a free port', async () => {
+    const response = await fetch(`${testServer.url}/healthz`)
 
     expect(response.status).toBe(200)
-    await expect(response.text()).resolves.toContain('Video Chat Room server scaffold')
+    await expect(response.json()).resolves.toEqual({ status: 'ok' })
   })
 
   it('accepts and closes a Socket.io connection', async () => {
