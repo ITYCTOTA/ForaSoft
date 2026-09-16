@@ -7,7 +7,7 @@
 | PRD | [prd-video-chat-room.md](../../prd-video-chat-room.md), v1.0 |
 | TDD | [design-video-chat-room-v4.md](design-video-chat-room-v4.md), v4.0 — текущая редакция файла |
 | Правила | [prd-tasks.mdc](../../prd-tasks.mdc) |
-| Статус | В работе; задачи 1–17 выполнены |
+| Статус | В работе; задачи 1–18 выполнены |
 
 ## Как выполнять план
 
@@ -132,7 +132,7 @@
   - Готово, когда: Тесты с fake devices покрывают camera-only/audio-only/no-devices/denied/busy; полученные дорожки включены по умолчанию, ошибки используют каталог TDD.
   - _Requirements: PRD §4 п.13, п.14, п.18, п.33, п.36; PRD §7. Design: §4, §7, §8._
 
-- [ ] 18. PeerConnectionManager: жизненный цикл peers
+- [x] 18. PeerConnectionManager: жизненный цикл peers
   - Создать реестр RTCPeerConnection по remote UUID с публичным Google STUN, callbacks remote streams и close/remove. Подготовить audio/video senders или transceivers даже для начального входа без устройств.
   - Область: Frontend / WebRTC. Оценка: 0,75 дн. После: №11, №15, №17.
   - Готово, когда: На одного remote UUID создаётся один PC, на клиента максимум три; получение remote media возможно без собственных tracks, удаление peer закрывает только его соединение.
