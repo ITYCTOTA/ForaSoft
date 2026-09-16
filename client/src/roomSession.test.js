@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { RoomSession } from './features/room/model/roomSession.js'
 
@@ -42,5 +42,11 @@ describe('RoomSession', () => {
     const sent = session.sendMediaState({ audioEnabled: false, videoEnabled: true })
     expect(socket.last).toMatchObject({ event: 'media:state', payload: { audioEnabled: false, videoEnabled: true } })
     socket.last.ack({ ok: true }); await expect(sent).resolves.toEqual({ ok: true })
+  })
+  it('cleans up once on expected leave without disconnect error', async () => {
+    const socket = fakeSocket(); const states = []; const cleanup = vi.fn(); const session = new RoomSession({ socketFactory: () => socket, onState: (state) => states.push(state) })
+    const joining = session.join({ roomId: 'room', displayName: 'Анна' }); socket.last.ack({ ok: true, self: { id: 'p' }, participants: [], messages: [] }); await joining
+    session.registerCleanup(cleanup); const leaving = session.leave(); expect(socket.last.event).toBe('room:leave'); socket.last.ack({ ok: true }); await leaving
+    expect(cleanup).toHaveBeenCalledOnce(); expect(states.at(-1)).toMatchObject({ status: 'idle' }); expect(states.some((state) => state.status === 'disconnected')).toBe(false)
   })
 })

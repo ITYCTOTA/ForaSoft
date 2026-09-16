@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { UI_MESSAGES, validateDisplayName } from "@video-chat-room/shared";
 import ChatPanel from "../features/room/ui/ChatPanel.jsx";
 import InviteLink from "../features/room/ui/InviteLink.jsx";
@@ -43,8 +43,21 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const mediaRef = useRef(null);
   const peerManagerRef = useRef(null);
   const negotiationRef = useRef(null);
+  useEffect(() => {
+    const leaveOnPageHide = () => void sessionRef.current?.leave({ waitForAck: false });
+    window.addEventListener("pagehide", leaveOnPageHide);
+    return () => {
+      window.removeEventListener("pagehide", leaveOnPageHide);
+      void sessionRef.current?.leave({ waitForAck: false });
+    };
+  }, []);
   const handleState = (state) => {
     setSessionState(state);
+    if (state.status === "idle" || state.status === "disconnected") {
+      setLocalStream(null);
+      setRemoteStreams({});
+      setMediaState({ audioEnabled: false, videoEnabled: false });
+    }
     if (state.status === "joined") {
       dispatchParticipants({
         type: "snapshot",
@@ -129,8 +142,13 @@ export default function RoomPage({ roomId, initialName = "" }) {
     const media = await mediaRef.current.acquire();
     await applyMediaState(media);
     setError(media.error ?? "");
-    if (!sessionRef.current)
+    if (!sessionRef.current) {
       sessionRef.current = new RoomSession({ onState: handleState });
+      sessionRef.current.registerCleanup(() => {
+        peerManagerRef.current?.closeAll();
+        mediaRef.current?.stop();
+      });
+    }
     sessionRef.current.join({ roomId, displayName: result.value });
   };
   const sendMessage = async (event) => {
@@ -152,6 +170,9 @@ export default function RoomPage({ roomId, initialName = "" }) {
       : await mediaRef.current.enableVideo();
     await applyMediaState(next);
   };
+  const leaveRoom = async () => {
+    await sessionRef.current?.leave();
+  };
   const visibleMessages = messagesList(messages);
   return (
     <main className="app-shell card">
@@ -171,6 +192,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
       {sessionState.status === "joined" && (
         <span role="status">Вы вошли в комнату.</span>
       )}
+      {sessionState.status === "joined" && <button type="button" onClick={leaveRoom}>Выйти</button>}
       {sessionState.status === "disconnected" && (
         <span role="alert">{sessionState.error}</span>
       )}
