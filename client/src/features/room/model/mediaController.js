@@ -9,13 +9,14 @@ function createEmptyStream(MediaStreamCtor) {
 }
 
 export class MediaController {
-  constructor({ mediaDevices = globalThis.navigator?.mediaDevices, secureContext = globalThis.isSecureContext !== false, MediaStreamCtor = globalThis.MediaStream } = {}) {
+  constructor({ mediaDevices = globalThis.navigator?.mediaDevices, secureContext = globalThis.isSecureContext !== false, MediaStreamCtor = globalThis.MediaStream, onStateChange = () => {} } = {}) {
     this.mediaDevices = mediaDevices
     this.secureContext = secureContext
     this.MediaStreamCtor = MediaStreamCtor
     this.stream = createEmptyStream(MediaStreamCtor)
     this.requestId = 0
     this.videoRequestId = 0
+    this.onStateChange = onStateChange
   }
 
   async acquire() {
@@ -31,6 +32,7 @@ export class MediaController {
     }
     this.stream = createEmptyStream(this.MediaStreamCtor)
     for (const result of [audio, video]) if (result.status === 'fulfilled') result.value.getTracks().forEach((track) => this.stream.addTrack(track))
+    this.#watchTracks()
     const error = messageFor([audio, video])
     return this.#result(error)
   }
@@ -38,7 +40,7 @@ export class MediaController {
   stop() {
     this.requestId += 1
     this.videoRequestId += 1
-    stopTracks(this.stream)
+    this.stream.getTracks().forEach((track) => { track.onended = null; track.stop() })
     this.stream = createEmptyStream(this.MediaStreamCtor)
     return this.#result()
   }
@@ -54,6 +56,7 @@ export class MediaController {
     this.videoRequestId += 1
     const track = this.stream.getVideoTracks()[0]
     if (!track) return this.#result()
+    track.onended = null
     track.stop()
     this.stream.removeTrack?.(track)
     return this.#result()
@@ -67,6 +70,7 @@ export class MediaController {
       const stream = await this.mediaDevices.getUserMedia({ audio: false, video: true })
       if (requestId !== this.videoRequestId) { stopTracks(stream); return this.#result() }
       stream.getVideoTracks().forEach((track) => this.stream.addTrack(track))
+      this.#watchTracks()
       return this.#result()
     } catch (error) {
       return this.#result(messageFor([{ status: 'rejected', reason: error }]))
@@ -75,6 +79,15 @@ export class MediaController {
 
   #result(error = null) {
     return { stream: this.stream, audioEnabled: this.stream.getAudioTracks().some((track) => track.enabled), videoEnabled: this.stream.getVideoTracks().some((track) => track.enabled), error }
+  }
+
+  #watchTracks() {
+    this.stream.getTracks().forEach((track) => {
+      track.onended = () => {
+        this.stream.removeTrack?.(track)
+        this.onStateChange(this.#result())
+      }
+    })
   }
 }
 

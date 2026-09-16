@@ -109,13 +109,25 @@ export default function RoomPage({ roomId, initialName = "" }) {
     if (state.status === "signal-ice")
       void negotiationRef.current?.handleIce(state);
   };
+  const applyMediaState = async (next) => {
+    setMediaState(next);
+    setLocalStream(next.stream);
+    await peerManagerRef.current?.setLocalStream(next.stream);
+    await sessionRef.current?.sendMediaState({
+      audioEnabled: next.audioEnabled,
+      videoEnabled: next.videoEnabled,
+    });
+    if (next.error) setError(next.error);
+  };
   const join = async () => {
     const result = validateDisplayName(name);
     if (!result.ok) return setError(result.message);
-    if (!mediaRef.current) mediaRef.current = new MediaController();
+    if (!mediaRef.current)
+      mediaRef.current = new MediaController({
+        onStateChange: (next) => void applyMediaState(next),
+      });
     const media = await mediaRef.current.acquire();
-    setLocalStream(media.stream);
-    setMediaState(media);
+    await applyMediaState(media);
     setError(media.error ?? "");
     if (!sessionRef.current)
       sessionRef.current = new RoomSession({ onState: handleState });
@@ -131,25 +143,14 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const toggleMicrophone = async () => {
     if (!mediaRef.current) return;
     const next = mediaRef.current.toggleAudio();
-    setMediaState(next);
-    await sessionRef.current?.sendMediaState({
-      audioEnabled: next.audioEnabled,
-      videoEnabled: next.videoEnabled,
-    });
+    await applyMediaState(next);
   };
   const toggleCamera = async () => {
     if (!mediaRef.current) return;
     const next = mediaState.videoEnabled
       ? mediaRef.current.disableVideo()
       : await mediaRef.current.enableVideo();
-    setMediaState(next);
-    setLocalStream(next.stream);
-    await peerManagerRef.current?.setLocalStream(next.stream);
-    await sessionRef.current?.sendMediaState({
-      audioEnabled: next.audioEnabled,
-      videoEnabled: next.videoEnabled,
-    });
-    if (next.error) setError(next.error);
+    await applyMediaState(next);
   };
   const visibleMessages = messagesList(messages);
   return (

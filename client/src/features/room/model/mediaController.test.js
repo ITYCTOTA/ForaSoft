@@ -37,4 +37,8 @@ describe('MediaController', () => {
     await controller.acquire(); expect(controller.disableVideo()).toMatchObject({ videoEnabled: false }); expect(first.stopped).toBe(true)
     await expect(controller.enableVideo()).resolves.toMatchObject({ videoEnabled: true }); expect(controller.stream.getVideoTracks()[0]).toBe(second)
   })
+  it('keeps the other media kind when a device track ends', async () => {
+    const audio = track('audio'); const video = track('video'); const states = []; const controller = new MediaController({ MediaStreamCtor: mediaStream, onStateChange: (state) => states.push(state), mediaDevices: { getUserMedia: ({ audio: wantsAudio }) => Promise.resolve(wantsAudio ? stream(audio) : stream(video)) } })
+    await controller.acquire(); audio.onended(); expect(states.at(-1)).toMatchObject({ audioEnabled: false, videoEnabled: true }); video.onended(); expect(states.at(-1)).toMatchObject({ audioEnabled: false, videoEnabled: false })
+  })
 })
