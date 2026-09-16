@@ -5,7 +5,7 @@ const MEDIA_UNAVAILABLE_MESSAGE = 'Камера или микрофон недо
 function createEmptyStream(MediaStreamCtor) {
   if (MediaStreamCtor) return new MediaStreamCtor()
   const tracks = []
-  return { addTrack: (track) => tracks.push(track), getTracks: () => tracks.slice(), getAudioTracks: () => tracks.filter((track) => track.kind === 'audio'), getVideoTracks: () => tracks.filter((track) => track.kind === 'video') }
+  return { addTrack: (track) => tracks.push(track), removeTrack: (track) => { const index = tracks.indexOf(track); if (index >= 0) tracks.splice(index, 1) }, getTracks: () => tracks.slice(), getAudioTracks: () => tracks.filter((track) => track.kind === 'audio'), getVideoTracks: () => tracks.filter((track) => track.kind === 'video') }
 }
 
 export class MediaController {
@@ -15,6 +15,7 @@ export class MediaController {
     this.MediaStreamCtor = MediaStreamCtor
     this.stream = createEmptyStream(MediaStreamCtor)
     this.requestId = 0
+    this.videoRequestId = 0
   }
 
   async acquire() {
@@ -36,6 +37,7 @@ export class MediaController {
 
   stop() {
     this.requestId += 1
+    this.videoRequestId += 1
     stopTracks(this.stream)
     this.stream = createEmptyStream(this.MediaStreamCtor)
     return this.#result()
@@ -46,6 +48,29 @@ export class MediaController {
     if (!track) return this.#result()
     track.enabled = !track.enabled
     return this.#result()
+  }
+
+  disableVideo() {
+    this.videoRequestId += 1
+    const track = this.stream.getVideoTracks()[0]
+    if (!track) return this.#result()
+    track.stop()
+    this.stream.removeTrack?.(track)
+    return this.#result()
+  }
+
+  async enableVideo() {
+    if (this.stream.getVideoTracks().length > 0) return this.#result()
+    const requestId = ++this.videoRequestId
+    if (!this.secureContext || !this.mediaDevices?.getUserMedia) return this.#result(UI_MESSAGES.WEBRTC_UNSUPPORTED)
+    try {
+      const stream = await this.mediaDevices.getUserMedia({ audio: false, video: true })
+      if (requestId !== this.videoRequestId) { stopTracks(stream); return this.#result() }
+      stream.getVideoTracks().forEach((track) => this.stream.addTrack(track))
+      return this.#result()
+    } catch (error) {
+      return this.#result(messageFor([{ status: 'rejected', reason: error }]))
+    }
   }
 
   #result(error = null) {

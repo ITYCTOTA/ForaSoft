@@ -137,6 +137,20 @@ export default function RoomPage({ roomId, initialName = "" }) {
       videoEnabled: next.videoEnabled,
     });
   };
+  const toggleCamera = async () => {
+    if (!mediaRef.current) return;
+    const next = mediaState.videoEnabled
+      ? mediaRef.current.disableVideo()
+      : await mediaRef.current.enableVideo();
+    setMediaState(next);
+    setLocalStream(next.stream);
+    await peerManagerRef.current?.setLocalStream(next.stream);
+    await sessionRef.current?.sendMediaState({
+      audioEnabled: next.audioEnabled,
+      videoEnabled: next.videoEnabled,
+    });
+    if (next.error) setError(next.error);
+  };
   const visibleMessages = messagesList(messages);
   return (
     <main className="app-shell card">
@@ -166,11 +180,15 @@ export default function RoomPage({ roomId, initialName = "" }) {
         localStream={localStream}
         remoteStreams={remoteStreams}
       />
-      <MediaControls
-        audioEnabled={mediaState.audioEnabled}
-        hasAudio={mediaRef.current?.stream.getAudioTracks().length > 0}
-        onToggleAudio={toggleMicrophone}
-      />
+      {sessionState.status === "joined" && (
+        <MediaControls
+          audioEnabled={mediaState.audioEnabled}
+          hasAudio={mediaRef.current?.stream.getAudioTracks().length > 0}
+          videoEnabled={mediaState.videoEnabled}
+          onToggleAudio={toggleMicrophone}
+          onToggleVideo={toggleCamera}
+        />
+      )}
       {Object.entries(peerFailures).map(([participantId, message]) => (
         <p key={participantId} role="alert">
           {participants.byId[participantId]?.displayName ?? "Участник"}:{" "}

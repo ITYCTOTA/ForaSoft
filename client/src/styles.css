@@ -36,6 +36,7 @@ button { border: 0; border-radius: .35rem; padding: .7rem 1rem; cursor: pointer;
 .messages small { color: #aab3c8; margin-right: .4rem; }
 .chat-form { display: flex; gap: .5rem; width: 100%; }
 .chat-form input { flex: 1; }
+.media-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
 .video-grid { display: grid; gap: .75rem; width: 100%; }
 .video-grid--1 { grid-template-columns: 1fr; }
 .video-tile { position: relative; min-height: 12rem; overflow: hidden; border-radius: .5rem; background: #202a3d; }

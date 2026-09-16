@@ -4,7 +4,7 @@ import { MediaController } from './mediaController.js'
 
 function track(kind) { return { kind, enabled: true, stop() { this.stopped = true } } }
 function stream(...tracks) { return { getTracks: () => tracks, getAudioTracks: () => tracks.filter((item) => item.kind === 'audio'), getVideoTracks: () => tracks.filter((item) => item.kind === 'video') } }
-const mediaStream = class { constructor() { this.tracks = [] } addTrack(item) { this.tracks.push(item) } getTracks() { return this.tracks } getAudioTracks() { return this.tracks.filter((item) => item.kind === 'audio') } getVideoTracks() { return this.tracks.filter((item) => item.kind === 'video') } }
+const mediaStream = class { constructor() { this.tracks = [] } addTrack(item) { this.tracks.push(item) } removeTrack(item) { this.tracks = this.tracks.filter((track) => track !== item) } getTracks() { return this.tracks } getAudioTracks() { return this.tracks.filter((item) => item.kind === 'audio') } getVideoTracks() { return this.tracks.filter((item) => item.kind === 'video') } }
 function rejected(name) { return Promise.reject({ name }) }
 
 describe('MediaController', () => {
@@ -31,5 +31,10 @@ describe('MediaController', () => {
     await controller.acquire()
     expect(controller.toggleAudio()).toMatchObject({ audioEnabled: false })
     expect(controller.toggleAudio()).toMatchObject({ audioEnabled: true })
+  })
+  it('stops camera and can acquire a new video track', async () => {
+    const first = track('video'); const second = track('video'); let calls = 0; const controller = new MediaController({ MediaStreamCtor: mediaStream, mediaDevices: { getUserMedia: ({ video }) => Promise.resolve(video ? stream(calls++ === 0 ? first : second) : stream()) } })
+    await controller.acquire(); expect(controller.disableVideo()).toMatchObject({ videoEnabled: false }); expect(first.stopped).toBe(true)
+    await expect(controller.enableVideo()).resolves.toMatchObject({ videoEnabled: true }); expect(controller.stream.getVideoTracks()[0]).toBe(second)
   })
 })
