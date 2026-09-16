@@ -73,4 +73,26 @@ describe('server composition root', () => {
       second.disconnect()
     }
   })
+
+  it('broadcasts server-authored chat and rate-limits the eleventh message', async () => {
+    const socket = connectTestSocket(testServer.url)
+    try {
+      const joined = await new Promise((resolve) => socket.emit('room:join', { roomId: 'chat-room', displayName: 'Чаттер' }, resolve))
+      const received = new Promise((resolve) => {
+        const onMessage = (message) => message.type === 'user' ? resolve(message) : socket.once('chat:message', onMessage)
+        socket.once('chat:message', onMessage)
+      })
+      const first = await new Promise((resolve) => socket.emit('chat:send', { text: '  hello  ', author: { participantId: 'spoof' } }, resolve))
+      expect(joined.ok).toBe(true)
+      expect(first).toMatchObject({ ok: true, message: { text: 'hello', author: { participantId: joined.self.id } } })
+      await expect(received).resolves.toMatchObject({ text: 'hello' })
+      for (let index = 0; index < 9; index += 1) {
+        await new Promise((resolve) => socket.emit('chat:send', { text: `message ${index}` }, resolve))
+      }
+      const limited = await new Promise((resolve) => socket.emit('chat:send', { text: 'too many' }, resolve))
+      expect(limited).toMatchObject({ ok: false, code: 'RATE_LIMITED' })
+    } finally {
+      socket.disconnect()
+    }
+  })
 })

@@ -1,11 +1,13 @@
-import { ERROR_CODES, SOCKET_EVENTS, UI_MESSAGES, serializeRoom, validateDisplayName, validateRoomId } from '@video-chat-room/shared'
+import { ERROR_CODES, SOCKET_EVENTS, UI_MESSAGES, serializeRoom, validateDisplayName, validateMessageText, validateRoomId } from '@video-chat-room/shared'
 
 export class RoomGateway {
-  constructor({ io, registry }) {
+  constructor({ io, registry, clock = () => Date.now() }) {
     this.io = io
     this.registry = registry
     this.bindings = new Map()
     this.participantSockets = new Map()
+    this.clock = clock
+    this.rateWindows = new Map()
   }
 
   register() {
@@ -18,6 +20,9 @@ export class RoomGateway {
         acknowledge?.({ ok: result.ok })
       })
       socket.on('disconnect', () => this.leave(socket))
+      socket.on(SOCKET_EVENTS.CHAT_SEND, (payload, acknowledge) => {
+        this.sendChat(socket, payload, acknowledge)
+      })
     })
     return this
   }
@@ -53,6 +58,7 @@ export class RoomGateway {
   leave(socket) {
     const binding = this.bindings.get(socket.id)
     if (!binding) return { ok: false }
+    this.rateWindows.delete(socket.id)
     this.bindings.delete(socket.id)
     this.participantSockets.delete(binding.participantId)
     const result = this.registry.leave(binding.roomId, binding.participantId)
@@ -63,5 +69,27 @@ export class RoomGateway {
       this.io.to(binding.roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, result.message)
     }
     return result
+  }
+
+  sendChat(socket, payload, acknowledge = () => {}) {
+    const binding = this.bindings.get(socket.id)
+    if (!binding) return acknowledge({ ok: false, code: ERROR_CODES.NOT_IN_ROOM, message: 'Вы не вошли в комнату.' })
+    const textResult = validateMessageText(payload?.text)
+    if (!textResult.ok) return acknowledge({ ok: false, code: textResult.code, message: textResult.message })
+    const now = this.clock()
+    const windowStart = now - 10_000
+    const timestamps = (this.rateWindows.get(socket.id) ?? []).filter((value) => value > windowStart)
+    if (timestamps.length >= 10) {
+      this.rateWindows.set(socket.id, timestamps)
+      return acknowledge({ ok: false, code: ERROR_CODES.RATE_LIMITED, message: 'Слишком много сообщений. Попробуйте позже.' })
+    }
+    timestamps.push(now)
+    this.rateWindows.set(socket.id, timestamps)
+    const participant = this.registry.get(binding.roomId)?.participants.get(binding.participantId)
+    if (!participant) return acknowledge({ ok: false, code: ERROR_CODES.NOT_IN_ROOM, message: 'Вы не вошли в комнату.' })
+    const message = this.registry.createUserMessage({ participant, text: textResult.value })
+    this.registry.appendMessage(binding.roomId, message)
+    this.io.to(binding.roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, message)
+    acknowledge({ ok: true, message })
   }
 }
