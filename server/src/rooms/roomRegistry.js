@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 
 import { ERROR_CODES, LIMITS } from '@video-chat-room/shared'
 
+import { appendMessage, createSystemMessage, createUserMessage, snapshotRoom } from './messageHistory.js'
+
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 /**
@@ -65,6 +67,25 @@ export class RoomRegistry {
 
   get roomCount() {
     return this.rooms.size
+  }
+
+  createUserMessage(input) {
+    return createUserMessage({ ...input, idFactory: this.idFactory, clock: this.clock })
+  }
+
+  createSystemMessage(input) {
+    return createSystemMessage({ ...input, idFactory: this.idFactory, clock: this.clock })
+  }
+
+  appendMessage(roomId, message) {
+    const room = this.rooms.get(roomId)
+    if (!room) return null
+    return appendMessage(room, message)
+  }
+
+  snapshot(roomId) {
+    const room = this.rooms.get(roomId)
+    return room ? snapshotRoom(room) : null
   }
 
   #createUniqueParticipantId(room) {
