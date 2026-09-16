@@ -111,4 +111,13 @@ describe('RoomRegistry', () => {
     expect(registry.has('room')).toBe(false)
     expect(registry.leave('room', joined.participant.id).ok).toBe(false)
   })
+
+  it('updates only the participant media state', () => {
+    const registry = makeRegistry()
+    const joined = registry.join({ roomId: 'room', displayName: 'Анна' })
+    expect(registry.updateMediaState('room', joined.participant.id, { audioEnabled: true, videoEnabled: true }))
+      .toEqual({ id: joined.participant.id, audioEnabled: true, videoEnabled: true })
+    expect(registry.get('room').participants.get(joined.participant.id).videoEnabled).toBe(true)
+    expect(registry.updateMediaState('room', 'missing', { audioEnabled: true, videoEnabled: true })).toBeNull()
+  })
 })

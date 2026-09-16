@@ -26,6 +26,7 @@ export class RoomGateway {
       for (const event of [SOCKET_EVENTS.SIGNAL_OFFER, SOCKET_EVENTS.SIGNAL_ANSWER, SOCKET_EVENTS.SIGNAL_ICE]) {
         socket.on(event, (payload, acknowledge) => this.relaySignal(socket, event, payload, acknowledge))
       }
+      socket.on(SOCKET_EVENTS.MEDIA_STATE, (payload, acknowledge) => this.updateMediaState(socket, payload, acknowledge))
     })
     return this
   }
@@ -113,6 +114,18 @@ export class RoomGateway {
       : { fromId: binding.participantId, sdp: payload.sdp }
     this.io.to(targetSocketId).emit(event, forwarded)
     acknowledge({ ok: true })
+  }
+
+  updateMediaState(socket, payload, acknowledge = () => {}) {
+    const binding = this.bindings.get(socket.id)
+    if (!binding) return acknowledge({ ok: false, code: ERROR_CODES.NOT_IN_ROOM, message: 'Вы не вошли в комнату.' })
+    if (typeof payload?.audioEnabled !== 'boolean' || typeof payload?.videoEnabled !== 'boolean') {
+      return acknowledge({ ok: false, code: ERROR_CODES.INVALID_MESSAGE, message: 'Состояние камеры и микрофона указано неверно.' })
+    }
+    const state = this.registry.updateMediaState(binding.roomId, binding.participantId, payload)
+    if (!state) return acknowledge({ ok: false, code: ERROR_CODES.NOT_IN_ROOM, message: 'Вы не вошли в комнату.' })
+    this.io.to(binding.roomId).emit(SOCKET_EVENTS.ROOM_MEDIA_STATE, { participantId: state.id, audioEnabled: state.audioEnabled, videoEnabled: state.videoEnabled })
+    acknowledge({ ok: true, state })
   }
 }
 

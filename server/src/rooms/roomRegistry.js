@@ -101,6 +101,14 @@ export class RoomRegistry {
     return { ok: true, room: room.participants.size > 0 ? room : null, participant: snapshot, message }
   }
 
+  updateMediaState(roomId, participantId, state) {
+    const participant = this.rooms.get(roomId)?.participants.get(participantId)
+    if (!participant) return null
+    participant.audioEnabled = state.audioEnabled
+    participant.videoEnabled = state.videoEnabled
+    return { id: participant.id, audioEnabled: participant.audioEnabled, videoEnabled: participant.videoEnabled }
+  }
+
   #createUniqueParticipantId(room) {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const id = this.idFactory()

@@ -114,4 +114,22 @@ describe('server composition root', () => {
       target.disconnect()
     }
   })
+
+  it('broadcasts validated media state and includes it in later snapshots', async () => {
+    const first = connectTestSocket(testServer.url)
+    const second = connectTestSocket(testServer.url)
+    try {
+      const firstJoin = await new Promise((resolve) => first.emit('room:join', { roomId: 'media-room', displayName: 'Анна' }, resolve))
+      await new Promise((resolve) => second.emit('room:join', { roomId: 'media-room', displayName: 'Борис' }, resolve))
+      const update = new Promise((resolve) => second.once('room:media-state', resolve))
+      const ack = await new Promise((resolve) => first.emit('media:state', { audioEnabled: true, videoEnabled: true }, resolve))
+      expect(ack).toMatchObject({ ok: true, state: { id: firstJoin.self.id, audioEnabled: true, videoEnabled: true } })
+      await expect(update).resolves.toEqual({ participantId: firstJoin.self.id, audioEnabled: true, videoEnabled: true })
+      const invalid = await new Promise((resolve) => first.emit('media:state', { audioEnabled: 'yes', videoEnabled: false }, resolve))
+      expect(invalid.code).toBe('INVALID_MESSAGE')
+    } finally {
+      first.disconnect()
+      second.disconnect()
+    }
+  })
 })
