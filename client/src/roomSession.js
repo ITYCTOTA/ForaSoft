@@ -48,6 +48,9 @@ export class RoomSession {
     this.socket.on('disconnect', () => {
       if (!this.suppressDisconnect) this.onState({ status: 'disconnected', error: UI_MESSAGES.SERVER_DISCONNECTED })
     })
+    this.socket.on('room:participant-joined', ({ participant }) => this.onState({ status: 'participant-joined', participant }))
+    this.socket.on('room:participant-left', ({ participantId, participant }) => this.onState({ status: 'participant-left', participantId: participantId ?? participant?.id }))
+    this.socket.on('room:media-state', (state) => this.onState({ status: 'media-state', ...state }))
   }
 }
 

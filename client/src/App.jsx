@@ -1,9 +1,10 @@
 /* eslint-disable no-unused-vars */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 
 import { validateDisplayName, validateRoomId } from '@video-chat-room/shared'
 
 import { RoomSession } from './roomSession.js'
+import { initialParticipantsState, participantsList, participantsReducer } from './participants.js'
 
 function roomIdFromPath() {
   const match = window.location.pathname.match(/^\/room\/([^/]+)$/)
@@ -71,6 +72,7 @@ function RoomLanding({ roomId, initialName = '' }) {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [sessionState, setSessionState] = useState({ status: 'idle' })
+  const [participants, dispatchParticipants] = useReducer(participantsReducer, initialParticipantsState)
   const sessionRef = useRef(null)
   const inviteUrl = window.location.href
   const copyInvite = async () => {
@@ -96,7 +98,13 @@ function RoomLanding({ roomId, initialName = '' }) {
     const result = validateDisplayName(name)
     if (!result.ok) return setError(result.message)
     setError('')
-    if (!sessionRef.current) sessionRef.current = new RoomSession({ onState: setSessionState })
+    if (!sessionRef.current) sessionRef.current = new RoomSession({ onState: (state) => {
+      setSessionState(state)
+      if (state.status === 'joined') dispatchParticipants({ type: 'snapshot', selfId: state.self.id, participants: state.participants })
+      if (state.status === 'participant-joined') dispatchParticipants({ type: 'joined', participant: state.participant })
+      if (state.status === 'participant-left') dispatchParticipants({ type: 'left', participantId: state.participantId })
+      if (state.status === 'media-state') dispatchParticipants({ type: 'media-state', ...state })
+    } })
     sessionRef.current.join({ roomId, displayName: result.value })
   }
   return <main className="app-shell card">
@@ -108,6 +116,10 @@ function RoomLanding({ roomId, initialName = '' }) {
     <button type="button" onClick={join}>Войти</button>
     {sessionState.status === 'joined' && <span role="status">Вы вошли в комнату.</span>}
     {sessionState.status === 'disconnected' && <span role="alert">{sessionState.error}</span>}
+    {participantsList(participants).length > 0 && <section aria-label="Участники">
+      <h2>Участники</h2>
+      <ul>{participantsList(participants).map((participant) => <li key={participant.id}>{participant.displayName}</li>)}</ul>
+    </section>}
     <small>Идентификатор комнаты: {roomId}</small>
   </main>
 }
