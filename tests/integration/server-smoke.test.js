@@ -48,4 +48,29 @@ describe('server composition root', () => {
       sockets.forEach((socket) => socket.disconnect())
     }
   })
+
+  it('handles explicit leave idempotently and frees the room', async () => {
+    const first = connectTestSocket(testServer.url)
+    const second = connectTestSocket(testServer.url)
+    try {
+      const firstJoin = await new Promise((resolve) => first.emit('room:join', { roomId: 'leave-room', displayName: 'Анна' }, resolve))
+      const secondJoin = await new Promise((resolve) => second.emit('room:join', { roomId: 'leave-room', displayName: 'Борис' }, resolve))
+      const leftEvent = new Promise((resolve) => second.once('room:participant-left', resolve))
+      const chatEvent = new Promise((resolve) => {
+        const onMessage = (message) => message.event === 'participant-left' ? resolve(message) : second.once('chat:message', onMessage)
+        second.once('chat:message', onMessage)
+      })
+      const leaveAck = await new Promise((resolve) => first.emit('room:leave', {}, resolve))
+      expect(firstJoin.ok).toBe(true)
+      expect(secondJoin.ok).toBe(true)
+      expect(leaveAck).toEqual({ ok: true })
+      await expect(leftEvent).resolves.toMatchObject({ participant: { displayName: 'Анна' } })
+      await expect(chatEvent).resolves.toMatchObject({ event: 'participant-left' })
+      first.disconnect()
+      expect(second.connected).toBe(true)
+    } finally {
+      first.disconnect()
+      second.disconnect()
+    }
+  })
 })

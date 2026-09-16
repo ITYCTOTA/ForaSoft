@@ -13,6 +13,11 @@ export class RoomGateway {
       socket.on(SOCKET_EVENTS.ROOM_JOIN, (payload, acknowledge) => {
         this.join(socket, payload, acknowledge)
       })
+      socket.on(SOCKET_EVENTS.ROOM_LEAVE, (_payload, acknowledge) => {
+        const result = this.leave(socket)
+        acknowledge?.({ ok: result.ok })
+      })
+      socket.on('disconnect', () => this.leave(socket))
     })
     return this
   }
@@ -43,5 +48,20 @@ export class RoomGateway {
     this.registry.appendMessage(roomId, systemMessage)
     socket.to(roomId).emit(SOCKET_EVENTS.ROOM_PARTICIPANT_JOINED, { participant: result.participant })
     this.io.to(roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, systemMessage)
+  }
+
+  leave(socket) {
+    const binding = this.bindings.get(socket.id)
+    if (!binding) return { ok: false }
+    this.bindings.delete(socket.id)
+    this.participantSockets.delete(binding.participantId)
+    const result = this.registry.leave(binding.roomId, binding.participantId)
+    socket.leave(binding.roomId)
+    if (!result.ok) return result
+    if (result.room) {
+      this.io.to(binding.roomId).emit(SOCKET_EVENTS.ROOM_PARTICIPANT_LEFT, { participant: result.participant })
+      this.io.to(binding.roomId).emit(SOCKET_EVENTS.CHAT_MESSAGE, result.message)
+    }
+    return result
   }
 }

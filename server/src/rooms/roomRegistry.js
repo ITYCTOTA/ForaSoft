@@ -88,6 +88,19 @@ export class RoomRegistry {
     return room ? snapshotRoom(room) : null
   }
 
+  leave(roomId, participantId) {
+    const room = this.rooms.get(roomId)
+    const participant = room?.participants.get(participantId)
+    if (!room || !participant) return { ok: false, room: null, participant: null, message: null }
+
+    const snapshot = { id: participant.id, displayName: participant.displayName }
+    room.participants.delete(participantId)
+    const message = this.createSystemMessage({ event: 'participant-left', participant: snapshot })
+    appendMessage(room, message)
+    if (room.participants.size === 0) this.rooms.delete(roomId)
+    return { ok: true, room: room.participants.size > 0 ? room : null, participant: snapshot, message }
+  }
+
   #createUniqueParticipantId(room) {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const id = this.idFactory()

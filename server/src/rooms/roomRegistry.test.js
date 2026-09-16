@@ -99,4 +99,16 @@ describe('RoomRegistry', () => {
     expect(() => registry.join({ roomId: 'room', displayName: 'Алекс' })).toThrow('UUID v4')
     expect(registry.has('room')).toBe(false)
   })
+
+  it('removes a participant, records a leave event and deletes empty rooms', () => {
+    const registry = makeRegistry()
+    const joined = registry.join({ roomId: 'room', displayName: 'Анна' })
+    const left = registry.leave('room', joined.participant.id)
+
+    expect(left.ok).toBe(true)
+    expect(left.message.event).toBe('participant-left')
+    expect(left.participant).toEqual({ id: joined.participant.id, displayName: 'Анна' })
+    expect(registry.has('room')).toBe(false)
+    expect(registry.leave('room', joined.participant.id).ok).toBe(false)
+  })
 })
