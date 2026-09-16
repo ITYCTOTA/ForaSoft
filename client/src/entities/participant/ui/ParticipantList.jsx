@@ -1,0 +1,1 @@
+export default function ParticipantList({ participants }) { if (participants.length === 0) return null; return <section aria-label="Участники"><h2>Участники</h2><ul>{participants.map((participant) => <li key={participant.id}>{participant.displayName}</li>)}</ul></section> }

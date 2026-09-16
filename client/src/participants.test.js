@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { initialParticipantsState, participantsList, participantsReducer } from './participants.js'
+import { initialParticipantsState, participantsList, participantsReducer } from './entities/participant/model/participants.js'
 
 const anna = { id: 'p-1', displayName: 'Анна', audioEnabled: false, videoEnabled: false }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { RoomSession } from './roomSession.js'
+import { RoomSession } from './features/room/model/roomSession.js'
 
 function fakeSocket() {
   const handlers = new Map()

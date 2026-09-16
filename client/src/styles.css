@@ -31,3 +31,8 @@ button { border: 0; border-radius: .35rem; padding: .7rem 1rem; cursor: pointer;
 .action-divider::before, .action-divider::after { content: ''; flex: 1; border-top: 1px solid #3f4a63; }
 .field-error { color: #ff9f9f; }
 .invite-url { overflow-wrap: anywhere; font-size: .9rem; }
+.messages { list-style: none; padding: 0; text-align: left; max-height: 16rem; overflow: auto; }
+.messages li { padding: .35rem 0; }
+.messages small { color: #aab3c8; margin-right: .4rem; }
+.chat-form { display: flex; gap: .5rem; width: 100%; }
+.chat-form input { flex: 1; }

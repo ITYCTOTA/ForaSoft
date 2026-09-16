@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import App from './App.jsx'
+import App from './app/App.jsx'
 
 describe('App', () => {
   it('renders the client scaffold', () => {
