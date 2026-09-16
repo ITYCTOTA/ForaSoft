@@ -53,6 +53,14 @@ export default function RoomPage({ roomId, initialName = "" }) {
   }, []);
   const handleState = (state) => {
     setSessionState(state);
+    if (state.status === "error") {
+      mediaRef.current?.stop();
+      peerManagerRef.current?.closeAll();
+      setLocalStream(null);
+      setRemoteStreams({});
+      setMediaState({ audioEnabled: false, videoEnabled: false });
+      sessionRef.current = null;
+    }
     if (state.status === "idle" || state.status === "disconnected") {
       setLocalStream(null);
       setRemoteStreams({});
@@ -65,6 +73,10 @@ export default function RoomPage({ roomId, initialName = "" }) {
         participants: state.participants,
       });
       dispatchMessages({ type: "snapshot", messages: state.messages });
+      void sessionRef.current?.sendMediaState({
+        audioEnabled: mediaRef.current?.stream.getAudioTracks().some((track) => track.enabled) ?? false,
+        videoEnabled: mediaRef.current?.stream.getVideoTracks().some((track) => track.enabled) ?? false,
+      });
       if (globalThis.RTCPeerConnection) {
         peerManagerRef.current = new PeerConnectionManager({
           onIceCandidate: (participantId, candidate) => {
@@ -133,8 +145,10 @@ export default function RoomPage({ roomId, initialName = "" }) {
     if (next.error) setError(next.error);
   };
   const join = async () => {
+    if (sessionState.status === "joining") return;
     const result = validateDisplayName(name);
     if (!result.ok) return setError(result.message);
+    setSessionState({ status: "joining" });
     if (!mediaRef.current)
       mediaRef.current = new MediaController({
         onStateChange: (next) => void applyMediaState(next),
@@ -186,8 +200,8 @@ export default function RoomPage({ roomId, initialName = "" }) {
         }}
         error={error}
       />
-      <button type="button" onClick={join}>
-        Войти
+      <button type="button" onClick={join} disabled={sessionState.status === "joining"}>
+        {sessionState.status === "joining" ? "Подключение..." : "Войти"}
       </button>
       {sessionState.status === "joined" && (
         <span role="status">Вы вошли в комнату.</span>
