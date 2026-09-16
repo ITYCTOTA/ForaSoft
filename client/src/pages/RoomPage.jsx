@@ -20,6 +20,7 @@ import { MediaController } from "../features/room/model/mediaController.js";
 import { NegotiationController } from "../features/room/model/negotiationController.js";
 import { PeerConnectionManager } from "../features/room/model/peerConnectionManager.js";
 import VideoGrid from "../features/room/ui/VideoGrid.jsx";
+import MediaControls from "../features/room/ui/MediaControls.jsx";
 
 export default function RoomPage({ roomId, initialName = "" }) {
   const [name, setName] = useState(initialName);
@@ -29,6 +30,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const [peerFailures, setPeerFailures] = useState({});
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [mediaState, setMediaState] = useState({ audioEnabled: false, videoEnabled: false });
   const [participants, dispatchParticipants] = useReducer(
     participantsReducer,
     initialParticipantsState,
@@ -113,6 +115,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
     if (!mediaRef.current) mediaRef.current = new MediaController();
     const media = await mediaRef.current.acquire();
     setLocalStream(media.stream);
+    setMediaState(media);
     setError(media.error ?? "");
     if (!sessionRef.current)
       sessionRef.current = new RoomSession({ onState: handleState });
@@ -124,6 +127,15 @@ export default function RoomPage({ roomId, initialName = "" }) {
     const result = await sessionRef.current.sendChat(messageText);
     if (result?.ok) setMessageText("");
     else if (result?.message) setError(result.message);
+  };
+  const toggleMicrophone = async () => {
+    if (!mediaRef.current) return;
+    const next = mediaRef.current.toggleAudio();
+    setMediaState(next);
+    await sessionRef.current?.sendMediaState({
+      audioEnabled: next.audioEnabled,
+      videoEnabled: next.videoEnabled,
+    });
   };
   const visibleMessages = messagesList(messages);
   return (
@@ -153,6 +165,11 @@ export default function RoomPage({ roomId, initialName = "" }) {
         selfId={participants.selfId}
         localStream={localStream}
         remoteStreams={remoteStreams}
+      />
+      <MediaControls
+        audioEnabled={mediaState.audioEnabled}
+        hasAudio={mediaRef.current?.stream.getAudioTracks().length > 0}
+        onToggleAudio={toggleMicrophone}
       />
       {Object.entries(peerFailures).map(([participantId, message]) => (
         <p key={participantId} role="alert">

@@ -26,4 +26,10 @@ describe('MediaController', () => {
     const pending = controller.acquire(); controller.stop(); const audio = track('audio'); resolveAudio(stream(audio)); await pending
     expect(audio.stopped).toBe(true)
   })
+  it('toggles an available microphone without recreating media', async () => {
+    const audio = track('audio'); const controller = new MediaController({ MediaStreamCtor: mediaStream, mediaDevices: { getUserMedia: ({ audio: wantsAudio }) => Promise.resolve(wantsAudio ? stream(audio) : stream()) } })
+    await controller.acquire()
+    expect(controller.toggleAudio()).toMatchObject({ audioEnabled: false })
+    expect(controller.toggleAudio()).toMatchObject({ audioEnabled: true })
+  })
 })

@@ -36,4 +36,11 @@ describe('RoomSession', () => {
     await expect(joining).resolves.toMatchObject({ code: 'ROOM_FULL' })
     expect(states.at(-1)).toMatchObject({ status: 'error', code: 'ROOM_FULL' })
   })
+
+  it('sends only explicit media state payload', async () => {
+    const socket = fakeSocket(); const session = new RoomSession({ socketFactory: () => socket })
+    const sent = session.sendMediaState({ audioEnabled: false, videoEnabled: true })
+    expect(socket.last).toMatchObject({ event: 'media:state', payload: { audioEnabled: false, videoEnabled: true } })
+    socket.last.ack({ ok: true }); await expect(sent).resolves.toEqual({ ok: true })
+  })
 })

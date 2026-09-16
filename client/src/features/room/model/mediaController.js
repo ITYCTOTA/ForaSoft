@@ -41,6 +41,13 @@ export class MediaController {
     return this.#result()
   }
 
+  toggleAudio() {
+    const track = this.stream.getAudioTracks()[0]
+    if (!track) return this.#result()
+    track.enabled = !track.enabled
+    return this.#result()
+  }
+
   #result(error = null) {
     return { stream: this.stream, audioEnabled: this.stream.getAudioTracks().some((track) => track.enabled), videoEnabled: this.stream.getVideoTracks().some((track) => track.enabled), error }
   }

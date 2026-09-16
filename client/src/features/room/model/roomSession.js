@@ -63,6 +63,11 @@ export class RoomSession {
       this.socket.emit("chat:send", { text }, resolve),
     );
   }
+  sendMediaState(state) {
+    return new Promise((resolve) =>
+      this.socket.emit("media:state", state, resolve),
+    );
+  }
   sendSignal(event, payload) {
     return new Promise((resolve) => this.socket.emit(event, payload, resolve));
   }
