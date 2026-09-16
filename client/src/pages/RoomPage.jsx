@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { useReducer, useRef, useState } from "react";
-import { validateDisplayName } from "@video-chat-room/shared";
+import { UI_MESSAGES, validateDisplayName } from "@video-chat-room/shared";
 import ChatPanel from "../features/room/ui/ChatPanel.jsx";
 import InviteLink from "../features/room/ui/InviteLink.jsx";
 import NameField from "../shared/ui/NameField.jsx";
@@ -25,6 +25,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const [error, setError] = useState("");
   const [sessionState, setSessionState] = useState({ status: "idle" });
   const [messageText, setMessageText] = useState("");
+  const [peerFailures, setPeerFailures] = useState({});
   const [participants, dispatchParticipants] = useReducer(
     participantsReducer,
     initialParticipantsState,
@@ -46,8 +47,28 @@ export default function RoomPage({ roomId, initialName = "" }) {
         participants: state.participants,
       });
       dispatchMessages({ type: "snapshot", messages: state.messages });
-      if (globalThis.RTCPeerConnection) {
-        peerManagerRef.current = new PeerConnectionManager();
+        if (globalThis.RTCPeerConnection) {
+          peerManagerRef.current = new PeerConnectionManager({
+            onIceCandidate: (participantId, candidate) => {
+              void sessionRef.current?.sendSignal("signal:ice", {
+                targetId: participantId,
+                candidate,
+              });
+            },
+            onPeerState: (participantId, connectionState) => {
+            if (connectionState === "failed")
+              setPeerFailures((current) => ({
+                ...current,
+                [participantId]: UI_MESSAGES.MEDIA_PEER_FAILED,
+              }));
+            if (connectionState === "connected")
+              setPeerFailures((current) => {
+                const next = { ...current };
+                delete next[participantId];
+                return next;
+              });
+          },
+        });
         negotiationRef.current = new NegotiationController({
           session: sessionRef.current,
           peerManager: peerManagerRef.current,
@@ -65,7 +86,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
         type: "left",
         participantId: state.participantId,
       });
-      peerManagerRef.current?.removePeer(state.participantId);
+      negotiationRef.current?.removePeer(state.participantId);
     }
     if (state.status === "media-state")
       dispatchParticipants({ type: "media-state", ...state });
@@ -75,6 +96,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
       void negotiationRef.current?.handleOffer(state);
     if (state.status === "signal-answer")
       void negotiationRef.current?.handleAnswer(state);
+    if (state.status === "signal-ice") void negotiationRef.current?.handleIce(state);
   };
   const join = async () => {
     const result = validateDisplayName(name);
@@ -116,6 +138,11 @@ export default function RoomPage({ roomId, initialName = "" }) {
         <span role="alert">{sessionState.error}</span>
       )}
       <ParticipantList participants={participantsList(participants)} />
+      {Object.entries(peerFailures).map(([participantId, message]) => (
+        <p key={participantId} role="alert">
+          {participants.byId[participantId]?.displayName ?? "Участник"}: {message}
+        </p>
+      ))}
       {visibleMessages.length > 0 && (
         <ChatPanel
           messages={visibleMessages}

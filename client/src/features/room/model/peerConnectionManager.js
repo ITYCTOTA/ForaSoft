@@ -8,6 +8,7 @@ export class PeerConnectionManager {
     maxPeers = 3,
     onRemoteStream = () => {},
     onPeerState = () => {},
+    onIceCandidate = () => {},
   } = {}) {
     this.RTCPeerConnectionCtor = RTCPeerConnectionCtor;
     this.MediaStreamCtor = MediaStreamCtor;
@@ -15,6 +16,7 @@ export class PeerConnectionManager {
     this.maxPeers = maxPeers;
     this.onRemoteStream = onRemoteStream;
     this.onPeerState = onPeerState;
+    this.onIceCandidate = onIceCandidate;
     this.peers = new Map();
   }
 
@@ -43,6 +45,9 @@ export class PeerConnectionManager {
     };
     connection.onconnectionstatechange = () =>
       this.onPeerState(participantId, connection.connectionState);
+    connection.onicecandidate = (event) => {
+      if (event.candidate) this.onIceCandidate(participantId, event.candidate);
+    };
     this.peers.set(participantId, peer);
     return peer;
   }
@@ -63,6 +68,7 @@ export class PeerConnectionManager {
     if (!peer) return false;
     peer.connection.ontrack = null;
     peer.connection.onconnectionstatechange = null;
+    peer.connection.onicecandidate = null;
     peer.connection.close();
     this.peers.delete(participantId);
     return true;

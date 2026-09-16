@@ -5,6 +5,7 @@ export class NegotiationController {
     this.selfId = null;
     this.queues = new Map();
     this.makingOffer = new Set();
+    this.pendingCandidates = new Map();
   }
   start({ self, participants }) {
     this.selfId = self.id;
@@ -39,6 +40,7 @@ export class NegotiationController {
       if (collision && peer.connection.setLocalDescription)
         await peer.connection.setLocalDescription({ type: "rollback" });
       await peer.connection.setRemoteDescription(sdp);
+      await this.#flushCandidates(fromId, peer);
       const answer = await peer.connection.createAnswer();
       await peer.connection.setLocalDescription(answer);
       await this.session.sendSignal("signal:answer", {
@@ -51,7 +53,31 @@ export class NegotiationController {
     return this.#enqueue(fromId, async () => {
       const peer = this.peerManager.ensurePeer(fromId);
       await peer.connection.setRemoteDescription(sdp);
+      await this.#flushCandidates(fromId, peer);
     });
+  }
+  handleIce({ fromId, candidate }) {
+    return this.#enqueue(fromId, async () => {
+      const peer = this.peerManager.ensurePeer(fromId);
+      if (!peer.connection.remoteDescription) {
+        const candidates = this.pendingCandidates.get(fromId) ?? [];
+        candidates.push(candidate);
+        this.pendingCandidates.set(fromId, candidates);
+        return;
+      }
+      await peer.connection.addIceCandidate(candidate);
+    });
+  }
+  removePeer(participantId) {
+    this.pendingCandidates.delete(participantId);
+    this.queues.delete(participantId);
+    return this.peerManager.removePeer(participantId);
+  }
+  async #flushCandidates(participantId, peer) {
+    const candidates = this.pendingCandidates.get(participantId) ?? [];
+    this.pendingCandidates.delete(participantId);
+    for (const candidate of candidates)
+      await peer.connection.addIceCandidate(candidate);
   }
   #enqueue(participantId, operation) {
     const previous = this.queues.get(participantId) ?? Promise.resolve();

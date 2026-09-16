@@ -6,6 +6,7 @@ class FakePeerConnection {
   addTransceiver(kind) { const sender = { kind, replaceTrack: async (track) => { sender.track = track } }; this.transceivers.push({ kind, sender }); return { sender } }
   close() { this.closed = true }
   emitTrack(track, streams = []) { this.ontrack({ track, streams }) }
+  emitCandidate(candidate) { this.onicecandidate({ candidate }) }
 }
 class FakeStream { constructor() { this.tracks = [] } addTrack(track) { this.tracks.push(track) } }
 
@@ -31,5 +32,15 @@ describe('PeerConnectionManager', () => {
     await manager.setLocalStream({ getAudioTracks: () => [{ kind: 'audio' }], getVideoTracks: () => [{ kind: 'video' }] })
     expect(peer.audioSender.track.kind).toBe('audio'); expect(peer.videoSender.track.kind).toBe('video')
     manager.closeAll(); expect(peer.connection.closed).toBe(true); expect(manager.peers.size).toBe(0)
+  })
+  it('reports a failed peer without affecting other connections', () => {
+    const states = []; const manager = new PeerConnectionManager({ RTCPeerConnectionCtor: FakePeerConnection, MediaStreamCtor: FakeStream, onPeerState: (...args) => states.push(args) }); const first = manager.ensurePeer('one'); const second = manager.ensurePeer('two')
+    first.connection.connectionState = 'failed'; first.connection.onconnectionstatechange()
+    expect(states).toEqual([['one', 'failed']]); expect(second.connection.closed).toBeUndefined()
+  })
+  it('forwards trickle ICE for its peer', () => {
+    const candidates = []; const manager = new PeerConnectionManager({ RTCPeerConnectionCtor: FakePeerConnection, MediaStreamCtor: FakeStream, onIceCandidate: (...args) => candidates.push(args) }); const peer = manager.ensurePeer('one')
+    peer.connection.emitCandidate({ candidate: 'candidate' })
+    expect(candidates).toEqual([['one', { candidate: 'candidate' }]])
   })
 })
