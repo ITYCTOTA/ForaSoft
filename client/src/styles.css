@@ -10,7 +10,7 @@
 
 body {
   margin: 0;
-  min-width: 1024px;
+  min-width: 320px;
 }
 
 .app-shell {
@@ -19,3 +19,12 @@ body {
   place-content: center;
   text-align: center;
 }
+
+.card { gap: 1rem; padding: 2rem; max-width: 34rem; margin: auto; }
+.field { display: grid; gap: .35rem; text-align: left; }
+input { border: 1px solid #65708a; border-radius: .35rem; padding: .7rem; font: inherit; }
+button { border: 0; border-radius: .35rem; padding: .7rem 1rem; cursor: pointer; font: inherit; }
+.join-row { display: flex; gap: .5rem; }
+.join-row input { flex: 1; }
+.field-error { color: #ff9f9f; }
+.invite-url { overflow-wrap: anywhere; font-size: .9rem; }
