@@ -4,7 +4,7 @@
 
 Корневой [render.yaml](../../render.yaml) описывает единственный Render Web Service. В нём нет БД, Redis, persistent disk, worker, cron или второго frontend-сервиса.
 
-- `buildCommand`: `npm ci && npm run build`;
+- `buildCommand`: `npm ci --include=dev && npm run build`; параметр `--include=dev` нужен, потому что `NODE_ENV=production` задан в сервисе, а Vite требуется на этапе сборки;
 - `startCommand`: `npm start` — Express, SPA и Socket.io работают в одном Node.js процессе и на одном порту;
 - `healthCheckPath`: `/healthz`;
 - `numInstances: 1` — `RoomRegistry` остаётся консистентным in-memory источником истины;
