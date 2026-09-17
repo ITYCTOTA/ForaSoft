@@ -24,7 +24,8 @@
     "test:unit": "npm run test:unit --workspaces --if-present",
     "test:unit:coverage": "npm run test:unit:coverage --workspaces --if-present",
     "test:integration": "vitest run --config tests/vitest.integration.config.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:soak": "node --expose-gc scripts/run-socket-soak.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
