@@ -5,6 +5,7 @@ import path from "node:path";
 import express from "express";
 import { Server } from "socket.io";
 
+import { ServerObservability } from "./observability.js";
 import { RoomGateway } from "./socket/roomGateway.js";
 import { RoomRegistry } from "./rooms/roomRegistry.js";
 
@@ -59,7 +60,12 @@ export function createApp({
 }
 
 export function createHttpServer(options = {}) {
-  const { app, config } = createApp(options);
+  const {
+    observability: suppliedObservability,
+    observabilityOptions,
+    ...appOptions
+  } = options;
+  const { app, config } = createApp(appOptions);
   const httpServer = createServer(app);
   const allowedOrigins = getAllowedOrigins(config);
   const isAllowedOrigin = (origin) =>
@@ -72,16 +78,41 @@ export function createHttpServer(options = {}) {
       callback(null, isAllowedOrigin(request.headers.origin)),
   });
   const registry = new RoomRegistry();
-  const gateway = new RoomGateway({ io, registry }).register();
-  return { app, config, httpServer, io, registry, gateway };
+  const observability =
+    suppliedObservability ??
+    new ServerObservability({
+      registry,
+      logLevel: config.logLevel,
+      ...observabilityOptions,
+    });
+  const gateway = new RoomGateway({ io, registry, observability }).register();
+  let shutdownPromise;
+  const shutdown = () => {
+    if (!shutdownPromise) {
+      observability.stop();
+      shutdownPromise = new Promise((resolve, reject) =>
+        io.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+    return shutdownPromise;
+  };
+  return {
+    app,
+    config,
+    httpServer,
+    io,
+    registry,
+    gateway,
+    observability,
+    shutdown,
+  };
 }
 
 export function startServer(options = {}) {
   const server = createHttpServer(options);
   server.httpServer.listen(server.config.port, "0.0.0.0", () => {
-    console.info(
-      `Video Chat Room server listening on port ${server.config.port}`,
-    );
+    server.observability.start();
+    server.observability.info("server_started");
   });
   return server;
 }

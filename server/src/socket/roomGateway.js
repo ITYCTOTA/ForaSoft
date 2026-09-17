@@ -9,17 +9,19 @@ import {
 } from "@video-chat-room/shared";
 
 export class RoomGateway {
-  constructor({ io, registry, clock = () => Date.now() }) {
+  constructor({ io, registry, observability, clock = () => Date.now() }) {
     this.io = io;
     this.registry = registry;
     this.bindings = new Map();
     this.participantSockets = new Map();
     this.clock = clock;
     this.rateWindows = new Map();
+    this.observability = observability ?? NOOP_OBSERVABILITY;
   }
 
   register() {
     this.io.on("connection", (socket) => {
+      this.observability.record("socketConnects");
       socket.on(SOCKET_EVENTS.ROOM_JOIN, (payload, acknowledge) => {
         this.join(socket, payload, acknowledge);
       });
@@ -27,7 +29,10 @@ export class RoomGateway {
         const result = this.leave(socket);
         acknowledge?.({ ok: result.ok });
       });
-      socket.on("disconnect", () => this.leave(socket));
+      socket.on("disconnect", () => {
+        this.observability.record("socketDisconnects");
+        this.leave(socket);
+      });
       socket.on(SOCKET_EVENTS.CHAT_SEND, (payload, acknowledge) => {
         this.sendChat(socket, payload, acknowledge);
       });
@@ -50,20 +55,22 @@ export class RoomGateway {
   join(socket, payload, acknowledge = () => {}) {
     const roomIdResult = validateRoomId(payload?.roomId);
     if (!roomIdResult.ok)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: roomIdResult.code,
         message: roomIdResult.message,
+        counter: "validationErrors",
       });
     const nameResult = validateDisplayName(payload?.displayName);
     if (!nameResult.ok)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: nameResult.code,
         message: nameResult.message,
+        counter: "validationErrors",
       });
     if (this.bindings.has(socket.id)) {
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.NOT_IN_ROOM,
         message: "Вы уже вошли в комнату.",
@@ -79,7 +86,12 @@ export class RoomGateway {
         result.code === ERROR_CODES.ROOM_FULL
           ? UI_MESSAGES.ROOM_FULL
           : "Не удалось войти в комнату.";
-      return acknowledge({ ok: false, code: result.code, message });
+      return this.#reject(acknowledge, {
+        ok: false,
+        code: result.code,
+        message,
+        counter: result.code === ERROR_CODES.ROOM_FULL ? "roomFull" : undefined,
+      });
     }
 
     const roomId = roomIdResult.value;
@@ -131,17 +143,18 @@ export class RoomGateway {
   sendChat(socket, payload, acknowledge = () => {}) {
     const binding = this.bindings.get(socket.id);
     if (!binding)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.NOT_IN_ROOM,
         message: "Вы не вошли в комнату.",
       });
     const textResult = validateMessageText(payload?.text);
     if (!textResult.ok)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: textResult.code,
         message: textResult.message,
+        counter: "validationErrors",
       });
     const now = this.clock();
     const windowStart = now - 10_000;
@@ -150,10 +163,11 @@ export class RoomGateway {
     );
     if (timestamps.length >= 10) {
       this.rateWindows.set(socket.id, timestamps);
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.RATE_LIMITED,
         message: "Слишком много сообщений. Попробуйте позже.",
+        counter: "rateLimited",
       });
     }
     timestamps.push(now);
@@ -162,7 +176,7 @@ export class RoomGateway {
       .get(binding.roomId)
       ?.participants.get(binding.participantId);
     if (!participant)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.NOT_IN_ROOM,
         message: "Вы не вошли в комнату.",
@@ -193,10 +207,11 @@ export class RoomGateway {
             event === SOCKET_EVENTS.SIGNAL_OFFER ? "offer" : "answer",
           );
     if (!binding || !validTarget || !validPayload) {
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.INVALID_SIGNAL_TARGET,
         message: "Не удалось установить медиасоединение с этим участником.",
+        counter: "relayErrors",
       });
     }
     const forwarded =
@@ -210,7 +225,7 @@ export class RoomGateway {
   updateMediaState(socket, payload, acknowledge = () => {}) {
     const binding = this.bindings.get(socket.id);
     if (!binding)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.NOT_IN_ROOM,
         message: "Вы не вошли в комнату.",
@@ -219,10 +234,11 @@ export class RoomGateway {
       typeof payload?.audioEnabled !== "boolean" ||
       typeof payload?.videoEnabled !== "boolean"
     ) {
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.INVALID_MESSAGE,
         message: "Состояние камеры и микрофона указано неверно.",
+        counter: "validationErrors",
       });
     }
     const state = this.registry.updateMediaState(
@@ -231,7 +247,7 @@ export class RoomGateway {
       payload,
     );
     if (!state)
-      return acknowledge({
+      return this.#reject(acknowledge, {
         ok: false,
         code: ERROR_CODES.NOT_IN_ROOM,
         message: "Вы не вошли в комнату.",
@@ -243,7 +259,17 @@ export class RoomGateway {
     });
     acknowledge({ ok: true, state });
   }
+
+  #reject(acknowledge, { code, message, counter }) {
+    this.observability.error(code, counter);
+    return acknowledge({ ok: false, code, message });
+  }
 }
+
+const NOOP_OBSERVABILITY = Object.freeze({
+  record() {},
+  error() {},
+});
 
 function isSessionDescription(value, expectedType) {
   return (

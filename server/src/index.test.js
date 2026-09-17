@@ -131,4 +131,28 @@ describe("HTTP composition root", () => {
       await new Promise((resolve) => io.close(resolve));
     }
   });
+
+  it("stops observability while shutting down the Socket.io server", async () => {
+    let stopped = 0;
+    const observability = {
+      record() {},
+      error() {},
+      info() {},
+      stop() {
+        stopped += 1;
+      },
+    };
+    const server = createHttpServer({
+      staticDir: "missing-dist",
+      observability,
+    });
+    server.httpServer.listen(0);
+    await new Promise((resolve) =>
+      server.httpServer.once("listening", resolve),
+    );
+
+    await server.shutdown();
+
+    expect(stopped).toBe(1);
+  });
 });

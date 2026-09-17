@@ -84,6 +84,12 @@ export class RoomRegistry {
     return this.rooms.size;
   }
 
+  get participantCount() {
+    let count = 0;
+    for (const room of this.rooms.values()) count += room.participants.size;
+    return count;
+  }
+
   createUserMessage(input) {
     return createUserMessage({
       ...input,
