@@ -17,6 +17,8 @@ const projectRoot = path.resolve(
 const DEVELOPMENT_ORIGINS = Object.freeze([
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:4173",
@@ -69,7 +71,9 @@ export function createHttpServer(options = {}) {
   const httpServer = createServer(app);
   const allowedOrigins = getAllowedOrigins(config);
   const isAllowedOrigin = (origin) =>
-    typeof origin === "string" && allowedOrigins.has(origin);
+    typeof origin === "string"
+      ? allowedOrigins.has(origin)
+      : config.nodeEnv !== "production";
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),

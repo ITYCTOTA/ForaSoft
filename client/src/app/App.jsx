@@ -6,7 +6,11 @@ import { useRouter } from "./router.jsx";
 export default function App() {
   const { roomId, initialName, navigate } = useRouter();
   return roomId ? (
-    <RoomPage roomId={roomId} initialName={initialName} />
+    <RoomPage
+      roomId={roomId}
+      initialName={initialName}
+      onLeave={() => navigate("/")}
+    />
   ) : (
     <HomePage onNavigate={navigate} />
   );

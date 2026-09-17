@@ -22,7 +22,7 @@ import { PeerConnectionManager } from "../features/room/model/peerConnectionMana
 import VideoGrid from "../features/room/ui/VideoGrid.jsx";
 import MediaControls from "../features/room/ui/MediaControls.jsx";
 
-export default function RoomPage({ roomId, initialName = "" }) {
+export default function RoomPage({ roomId, initialName = "", onLeave }) {
   const [name, setName] = useState(initialName);
   const [error, setError] = useState("");
   const [sessionPhase, setSessionPhase] = useState("idle");
@@ -211,6 +211,7 @@ export default function RoomPage({ roomId, initialName = "" }) {
   };
   const leaveRoom = async () => {
     await sessionRef.current?.leave();
+    onLeave?.();
   };
   const visibleMessages = messagesList(messages);
   const isInRoom = sessionPhase === "joined" || sessionPhase === "leaving";
