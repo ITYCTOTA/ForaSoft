@@ -6,10 +6,11 @@ function fakeSocket() {
   const handlers = new Map()
   return {
     connected: false,
+    connectCalls: 0,
     on(event, handler) { handlers.set(event, handler) },
     once(event, handler) { handlers.set(`once:${event}`, handler) },
     emit(event, payload, ack) { this.last = { event, payload, ack } },
-    connect() { this.connected = true; handlers.get('once:connect')?.() },
+    connect() { this.connectCalls += 1; this.connected = true; handlers.get('once:connect')?.() },
     disconnect() { this.connected = false; handlers.get('disconnect')?.() },
     trigger(event, value) { handlers.get(`once:${event}`)?.(value) },
   }
@@ -48,5 +49,23 @@ describe('RoomSession', () => {
     const joining = session.join({ roomId: 'room', displayName: 'Анна' }); socket.last.ack({ ok: true, self: { id: 'p' }, participants: [], messages: [] }); await joining
     session.registerCleanup(cleanup); const leaving = session.leave(); expect(socket.last.event).toBe('room:leave'); socket.last.ack({ ok: true }); await leaving
     expect(cleanup).toHaveBeenCalledOnce(); expect(states.at(-1)).toMatchObject({ status: 'idle' }); expect(states.some((state) => state.status === 'disconnected')).toBe(false)
+  })
+
+  it('ends an unexpected disconnect once and never reconnects silently', async () => {
+    const socket = fakeSocket(); const states = []; const cleanup = vi.fn()
+    const session = new RoomSession({ socketFactory: () => socket, onState: (state) => states.push(state) })
+    const joining = session.join({ roomId: 'room', displayName: 'Анна' })
+    socket.last.ack({ ok: true, self: { id: 'p' }, participants: [], messages: [] }); await joining
+    session.registerCleanup(cleanup)
+
+    socket.disconnect()
+    socket.disconnect()
+
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(states.at(-1)).toMatchObject({
+      status: 'disconnected',
+      error: 'Соединение с сервером потеряно. Войдите снова.',
+    })
+    expect(socket.connectCalls).toBe(1)
   })
 })

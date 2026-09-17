@@ -1,6 +1,10 @@
 /* eslint-disable no-unused-vars */
 import { useEffect, useReducer, useRef, useState } from "react";
-import { UI_MESSAGES, validateDisplayName } from "@video-chat-room/shared";
+import {
+  ERROR_CODES,
+  UI_MESSAGES,
+  validateDisplayName,
+} from "@video-chat-room/shared";
 import ChatPanel from "../features/room/ui/ChatPanel.jsx";
 import InviteLink from "../features/room/ui/InviteLink.jsx";
 import NameField from "../shared/ui/NameField.jsx";
@@ -27,6 +31,7 @@ export default function RoomPage({ roomId, initialName = "", onLeave }) {
   const [error, setError] = useState("");
   const [sessionPhase, setSessionPhase] = useState("idle");
   const [connectionError, setConnectionError] = useState("");
+  const [connectionErrorCode, setConnectionErrorCode] = useState("");
   const [messageText, setMessageText] = useState("");
   const [peerFailures, setPeerFailures] = useState({});
   const [localStream, setLocalStream] = useState(null);
@@ -71,6 +76,7 @@ export default function RoomPage({ roomId, initialName = "", onLeave }) {
     }
     if (state.status === "disconnected" || state.status === "error")
       setConnectionError(state.error ?? "");
+    if (state.status === "error") setConnectionErrorCode(state.code ?? "");
     if (state.status === "error") {
       mediaRef.current?.stop();
       peerManagerRef.current?.closeAll();
@@ -172,8 +178,15 @@ export default function RoomPage({ roomId, initialName = "", onLeave }) {
     if (sessionPhase === "joining") return;
     const result = validateDisplayName(name);
     if (!result.ok) return setError(result.message);
+    if (!globalThis.RTCPeerConnection) {
+      setConnectionError("");
+      setConnectionErrorCode("");
+      setError(UI_MESSAGES.WEBRTC_UNSUPPORTED);
+      return;
+    }
     setSessionPhase("joining");
     setConnectionError("");
+    setConnectionErrorCode("");
     if (!mediaRef.current)
       mediaRef.current = new MediaController({
         onStateChange: (next) => void applyMediaState(next),
@@ -249,6 +262,7 @@ export default function RoomPage({ roomId, initialName = "", onLeave }) {
               onToggleAudio={toggleMicrophone}
               onToggleVideo={toggleCamera}
             />
+            {error && <p role="alert">{error}</p>}
             {Object.entries(peerFailures).map(([participantId, message]) => (
               <p key={participantId} role="alert" className="peer-failure">
                 {participants.byId[participantId]?.displayName ?? "Участник"}:{" "}
@@ -290,7 +304,11 @@ export default function RoomPage({ roomId, initialName = "", onLeave }) {
         onClick={join}
         disabled={sessionPhase === "joining"}
       >
-        {sessionPhase === "joining" ? "Подключение..." : "Войти"}
+        {sessionPhase === "joining"
+          ? "Подключение..."
+          : connectionErrorCode === ERROR_CODES.ROOM_FULL
+            ? "Повторить вход"
+            : "Войти"}
       </button>
       <small>Идентификатор комнаты: {roomId}</small>
     </main>
