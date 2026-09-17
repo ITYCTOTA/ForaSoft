@@ -7,6 +7,10 @@ export default defineConfig({
       provider: 'v8',
       reportsDirectory: '../coverage/shared',
       reporter: ['text', 'html'],
+      include: ['src/validation.js'],
+      thresholds: {
+        branches: 80,
+      },
     },
   },
 })

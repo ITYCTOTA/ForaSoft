@@ -8,6 +8,10 @@ export default defineConfig({
       provider: 'v8',
       reportsDirectory: '../coverage/server',
       reporter: ['text', 'html'],
+      include: ['src/rooms/**/*.js'],
+      thresholds: {
+        branches: 80,
+      },
     },
   },
 })

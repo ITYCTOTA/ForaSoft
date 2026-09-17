@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+
 export default defineConfig({
   testDir: "./tests/browser",
   timeout: 15_000,
@@ -19,9 +21,12 @@ export default defineConfig({
     },
     ...devices["Desktop Chrome"],
   },
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    : "list",
   webServer: [
     {
-      command: "npm.cmd run start --workspace=server",
+      command: `${npmCommand} run start --workspace=server`,
       cwd: ".",
       env: {
         ...process.env,
@@ -34,7 +39,7 @@ export default defineConfig({
     },
     {
       command:
-        "npm.cmd run dev --workspace=client -- --host 127.0.0.1 --port 4174 --strictPort",
+        `${npmCommand} run dev --workspace=client -- --host 127.0.0.1 --port 4174 --strictPort`,
       cwd: ".",
       env: {
         ...process.env,
