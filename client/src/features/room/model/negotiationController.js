@@ -7,15 +7,13 @@ export class NegotiationController {
     this.makingOffer = new Set();
     this.pendingCandidates = new Map();
   }
-  start({ self, participants }) {
+  start({ self }) {
     this.selfId = self.id;
-    participants
-      .filter((participant) => participant.id !== self.id)
-      .forEach((participant) => this.peerManager.ensurePeer(participant.id));
   }
   participantJoined(participant) {
     return this.#enqueue(participant.id, async () => {
       const peer = this.peerManager.ensurePeer(participant.id);
+      await peer.ready;
       this.makingOffer.add(participant.id);
       try {
         const offer = await peer.connection.createOffer();
@@ -31,7 +29,8 @@ export class NegotiationController {
   }
   handleOffer({ fromId, sdp }) {
     return this.#enqueue(fromId, async () => {
-      const peer = this.peerManager.ensurePeer(fromId);
+      const peer = this.peerManager.ensurePeer(fromId, { prepareOffer: false });
+      await peer.ready;
       const collision =
         this.makingOffer.has(fromId) ||
         peer.connection.signalingState !== "stable";
@@ -40,6 +39,7 @@ export class NegotiationController {
       if (collision && peer.connection.setLocalDescription)
         await peer.connection.setLocalDescription({ type: "rollback" });
       await peer.connection.setRemoteDescription(sdp);
+      await this.peerManager.attachLocalMediaForAnswer?.(peer);
       await this.#flushCandidates(fromId, peer);
       const answer = await peer.connection.createAnswer();
       await peer.connection.setLocalDescription(answer);
@@ -52,6 +52,7 @@ export class NegotiationController {
   handleAnswer({ fromId, sdp }) {
     return this.#enqueue(fromId, async () => {
       const peer = this.peerManager.ensurePeer(fromId);
+      await peer.ready;
       await peer.connection.setRemoteDescription(sdp);
       await this.#flushCandidates(fromId, peer);
     });
@@ -59,6 +60,7 @@ export class NegotiationController {
   handleIce({ fromId, candidate }) {
     return this.#enqueue(fromId, async () => {
       const peer = this.peerManager.ensurePeer(fromId);
+      await peer.ready;
       if (!peer.connection.remoteDescription) {
         const candidates = this.pendingCandidates.get(fromId) ?? [];
         candidates.push(candidate);

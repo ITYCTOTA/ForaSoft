@@ -18,9 +18,10 @@ export class PeerConnectionManager {
     this.onPeerState = onPeerState;
     this.onIceCandidate = onIceCandidate;
     this.peers = new Map();
+    this.localStream = null;
   }
 
-  ensurePeer(participantId) {
+  ensurePeer(participantId, { prepareOffer = true } = {}) {
     if (this.peers.has(participantId)) return this.peers.get(participantId);
     if (this.peers.size >= this.maxPeers)
       throw new Error("Peer capacity exceeded");
@@ -28,14 +29,15 @@ export class PeerConnectionManager {
     const connection = new this.RTCPeerConnectionCtor({
       iceServers: this.iceServers,
     });
-    const audio = connection.addTransceiver("audio", { direction: "sendrecv" });
-    const video = connection.addTransceiver("video", { direction: "sendrecv" });
     const peer = {
       participantId,
       connection,
-      audioSender: audio.sender,
-      videoSender: video.sender,
+      audioTransceiver: null,
+      videoTransceiver: null,
+      audioSender: null,
+      videoSender: null,
       remoteStream: null,
+      ready: null,
     };
     connection.ontrack = (event) => {
       const stream =
@@ -49,18 +51,26 @@ export class PeerConnectionManager {
       if (event.candidate) this.onIceCandidate(participantId, event.candidate);
     };
     this.peers.set(participantId, peer);
+    peer.ready = prepareOffer
+      ? this.#createOfferTransceivers(peer)
+      : Promise.resolve();
     return peer;
   }
 
   async setLocalStream(stream) {
-    const audioTrack = stream?.getAudioTracks?.()[0] ?? null;
-    const videoTrack = stream?.getVideoTracks?.()[0] ?? null;
+    this.localStream = stream;
     await Promise.all(
-      [...this.peers.values()].flatMap((peer) => [
-        peer.audioSender.replaceTrack(audioTrack),
-        peer.videoSender.replaceTrack(videoTrack),
-      ]),
+      [...this.peers.values()].map((peer) => {
+        peer.ready = this.#replaceTracks(peer, stream);
+        return peer.ready;
+      }),
     );
+  }
+
+  async attachLocalMediaForAnswer(peer) {
+    this.#adoptRemoteTransceivers(peer);
+    await this.#replaceTracks(peer, this.localStream);
+    this.#setSendReceiveDirections(peer);
   }
 
   removePeer(participantId) {
@@ -78,6 +88,50 @@ export class PeerConnectionManager {
     [...this.peers.keys()].forEach((participantId) =>
       this.removePeer(participantId),
     );
+  }
+
+  async #replaceTracks(peer, stream) {
+    const audioTrack = stream?.getAudioTracks?.()[0] ?? null;
+    const videoTrack = stream?.getVideoTracks?.()[0] ?? null;
+    await Promise.all(
+      [
+        peer.audioSender && peer.audioSender.replaceTrack(audioTrack),
+        peer.videoSender && peer.videoSender.replaceTrack(videoTrack),
+      ].filter(Boolean),
+    );
+  }
+
+  async #createOfferTransceivers(peer) {
+    const audioTrack = this.localStream?.getAudioTracks?.()[0] ?? null;
+    const videoTrack = this.localStream?.getVideoTracks?.()[0] ?? null;
+    peer.audioTransceiver = peer.connection.addTransceiver(audioTrack ?? "audio", {
+      direction: "sendrecv",
+      ...(audioTrack ? { streams: [this.localStream] } : {}),
+    });
+    peer.videoTransceiver = peer.connection.addTransceiver(videoTrack ?? "video", {
+      direction: "sendrecv",
+      ...(videoTrack ? { streams: [this.localStream] } : {}),
+    });
+    peer.audioSender = peer.audioTransceiver.sender;
+    peer.videoSender = peer.videoTransceiver.sender;
+    await this.#replaceTracks(peer, this.localStream);
+  }
+
+  #adoptRemoteTransceivers(peer) {
+    const transceivers = peer.connection.getTransceivers?.() ?? [];
+    peer.audioTransceiver ??= transceivers.find(
+      (transceiver) => transceiver.receiver?.track?.kind === "audio",
+    ) ?? null;
+    peer.videoTransceiver ??= transceivers.find(
+      (transceiver) => transceiver.receiver?.track?.kind === "video",
+    ) ?? null;
+    peer.audioSender ??= peer.audioTransceiver?.sender ?? null;
+    peer.videoSender ??= peer.videoTransceiver?.sender ?? null;
+  }
+
+  #setSendReceiveDirections(peer) {
+    if (peer.audioSender?.track) peer.audioTransceiver.direction = "sendrecv";
+    if (peer.videoSender?.track) peer.videoTransceiver.direction = "sendrecv";
   }
 
   #appendRemoteTrack(peer, track) {

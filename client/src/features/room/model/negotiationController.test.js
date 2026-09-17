@@ -70,6 +70,31 @@ describe("NegotiationController", () => {
     expect(peers.get("a").connection.remoteDescription.sdp).toBe("remote");
     expect(sent[0].event).toBe("signal:answer");
   });
+  it("waits for a new peer to receive local tracks before sending an offer", async () => {
+    let finishPeerSetup;
+    const peer = { connection: new FakeConnection() };
+    peer.ready = new Promise((resolve) => {
+      finishPeerSetup = resolve;
+    });
+    const sent = [];
+    const controller = new NegotiationController({
+      session: {
+        sendSignal: async (event, payload) => sent.push({ event, payload }),
+      },
+      peerManager: {
+        ensurePeer: () => peer,
+        removePeer: () => true,
+      },
+    });
+    controller.start({ self: { id: "a" }, participants: [] });
+
+    const negotiation = controller.participantJoined({ id: "b" });
+    expect(sent).toEqual([]);
+    finishPeerSetup();
+    await negotiation;
+
+    expect(sent[0].event).toBe("signal:offer");
+  });
   it("uses deterministic polite role to ignore an offer collision", async () => {
     const { controller, peers, sent } = setup();
     controller.start({ self: { id: "a" }, participants: [] });

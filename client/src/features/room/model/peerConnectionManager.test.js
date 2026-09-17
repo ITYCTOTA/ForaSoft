@@ -7,15 +7,22 @@ class FakePeerConnection {
     this.transceivers = [];
     this.connectionState = "new";
   }
-  addTransceiver(kind) {
+  addTransceiver(trackOrKind) {
+    const track = typeof trackOrKind === "string" ? null : trackOrKind;
+    const kind = track?.kind ?? trackOrKind;
     const sender = {
       kind,
+      track,
       replaceTrack: async (track) => {
         sender.track = track;
       },
     };
-    this.transceivers.push({ kind, sender });
-    return { sender };
+    const transceiver = { kind, sender, receiver: { track: { kind } } };
+    this.transceivers.push(transceiver);
+    return transceiver;
+  }
+  getTransceivers() {
+    return this.transceivers;
   }
   close() {
     this.closed = true;
@@ -86,6 +93,59 @@ describe("PeerConnectionManager", () => {
     manager.closeAll();
     expect(peer.connection.closed).toBe(true);
     expect(manager.peers.size).toBe(0);
+  });
+  it("attaches the latest local stream to peers created after media acquisition", async () => {
+    const manager = new PeerConnectionManager({
+      RTCPeerConnectionCtor: FakePeerConnection,
+      MediaStreamCtor: FakeStream,
+    });
+    const stream = {
+      getAudioTracks: () => [{ kind: "audio" }],
+      getVideoTracks: () => [{ kind: "video" }],
+    };
+
+    await manager.setLocalStream(stream);
+    const peer = manager.ensurePeer("late-peer");
+    await peer.ready;
+
+    expect(peer.audioSender.track).toEqual({ kind: "audio" });
+    expect(peer.videoSender.track).toEqual({ kind: "video" });
+  });
+  it("adds local tracks while creating a peer for the initial SDP exchange", async () => {
+    const manager = new PeerConnectionManager({
+      RTCPeerConnectionCtor: FakePeerConnection,
+      MediaStreamCtor: FakeStream,
+    });
+    const stream = {
+      getAudioTracks: () => [{ kind: "audio" }],
+      getVideoTracks: () => [{ kind: "video" }],
+    };
+
+    await manager.setLocalStream(stream);
+    const peer = manager.ensurePeer("initial-peer");
+
+    expect(peer.audioSender.track).toEqual({ kind: "audio" });
+    expect(peer.videoSender.track).toEqual({ kind: "video" });
+  });
+  it("attaches local tracks to transceivers created by an incoming offer", async () => {
+    const manager = new PeerConnectionManager({
+      RTCPeerConnectionCtor: FakePeerConnection,
+      MediaStreamCtor: FakeStream,
+    });
+    await manager.setLocalStream({
+      getAudioTracks: () => [{ kind: "audio" }],
+      getVideoTracks: () => [{ kind: "video" }],
+    });
+    const peer = manager.ensurePeer("answer-peer", { prepareOffer: false });
+    peer.connection.addTransceiver("audio");
+    peer.connection.addTransceiver("video");
+
+    await manager.attachLocalMediaForAnswer(peer);
+
+    expect(peer.audioSender.track).toEqual({ kind: "audio" });
+    expect(peer.videoSender.track).toEqual({ kind: "video" });
+    expect(peer.audioTransceiver.direction).toBe("sendrecv");
+    expect(peer.videoTransceiver.direction).toBe("sendrecv");
   });
   it("reports a failed peer without affecting other connections", () => {
     const states = [];
