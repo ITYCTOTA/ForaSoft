@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import VideoGrid, { gridClassName } from "./VideoGrid.jsx";
 
 const participants = [
@@ -30,5 +30,27 @@ describe("VideoGrid", () => {
     expect(screen.getByText("Анна (вы)")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/Нет видео/)).toHaveLength(2);
     expect(screen.getByLabelText("Микрофон выключен")).toBeInTheDocument();
+  });
+  it("hides a frozen remote video when its media state says camera is off", () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+    const remoteStream = {
+      getVideoTracks: () => [{ readyState: "live" }],
+    };
+    render(
+      createElement(VideoGrid, {
+        participants: [
+          { ...participants[1], videoEnabled: false },
+        ],
+        selfId: "self",
+        localStream: null,
+        remoteStreams: { remote: remoteStream },
+      }),
+    );
+
+    expect(screen.getByLabelText("Нет видео: Борис")).toBeInTheDocument();
+    expect(document.querySelector("video")).toHaveClass("audio-only");
+    play.mockRestore();
   });
 });

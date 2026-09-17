@@ -8,7 +8,11 @@ export function gridClassName(count) {
 function VideoTile({ participant, stream, self }) {
   const videoRef = useRef(null);
   const [needsAudioGesture, setNeedsAudioGesture] = useState(false);
-  const hasVideo = stream?.getVideoTracks?.().length > 0;
+  const hasVideo =
+    participant.videoEnabled === true &&
+    stream
+      ?.getVideoTracks?.()
+      .some((track) => track.readyState !== "ended");
 
   useEffect(() => {
     const video = videoRef.current;

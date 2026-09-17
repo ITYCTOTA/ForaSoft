@@ -113,6 +113,13 @@ test("covers create, invite, duplicate names, chat, controls, late join and volu
           .evaluate((video) => video.srcObject?.getVideoTracks().length),
       )
       .toBe(0);
+    await expect(guest.getByLabel("Нет видео: Алиса")).toBeVisible();
+    await expect(
+      guest
+        .locator(".video-tile")
+        .filter({ has: guest.getByLabel("Нет видео: Алиса") })
+        .locator("video"),
+    ).toHaveClass(/audio-only/);
     await creator.getByRole("button", { name: "Включить камеру" }).click();
     await expect
       .poll(async () =>
