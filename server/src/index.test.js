@@ -1,3 +1,5 @@
+import { request as httpRequest } from "node:http";
+
 import { describe, expect, it } from "vitest";
 import { io as createSocket } from "socket.io-client";
 
@@ -17,6 +19,21 @@ function connect(url, origin) {
     timeout: 500,
     transports: ["websocket"],
     extraHeaders: { Origin: origin },
+  });
+}
+
+function getWithoutOrigin(url, host) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      url,
+      { headers: { Host: host } },
+      (response) => {
+        response.resume();
+        response.once("end", () => resolve(response.statusCode));
+      },
+    );
+    request.once("error", reject);
+    request.end();
   });
 }
 
@@ -98,7 +115,7 @@ describe("HTTP composition root", () => {
     );
   });
 
-  it("rejects a disallowed Origin for polling and WebSocket handshakes", async () => {
+  it("allows same-origin polling without Origin and rejects a disallowed Origin", async () => {
     const { httpServer, io } = createHttpServer({
       env: {
         NODE_ENV: "production",
@@ -121,7 +138,12 @@ describe("HTTP composition root", () => {
       const polling = await fetch(`${url}/socket.io/?EIO=4&transport=polling`, {
         headers: { Origin: "https://attacker.example.test" },
       });
+      const sameOriginPolling = await getWithoutOrigin(
+        `${url}/socket.io/?EIO=4&transport=polling`,
+        "video.example.test",
+      );
       expect(polling.status).toBe(403);
+      expect(sameOriginPolling).toBe(200);
       await rejectedHandshake;
       expect(allowed.connected).toBe(true);
       expect(rejected.connected).toBe(false);

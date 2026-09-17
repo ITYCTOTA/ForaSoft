@@ -70,16 +70,22 @@ export function createHttpServer(options = {}) {
   const { app, config } = createApp(appOptions);
   const httpServer = createServer(app);
   const allowedOrigins = getAllowedOrigins(config);
+  const publicOrigin = normalizeOrigin(config.publicOrigin);
   const isAllowedOrigin = (origin) =>
     typeof origin === "string"
       ? allowedOrigins.has(origin)
       : config.nodeEnv !== "production";
   const io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+      origin: (origin, callback) =>
+        callback(null, typeof origin !== "string" || isAllowedOrigin(origin)),
     },
     allowRequest: (request, callback) =>
-      callback(null, isAllowedOrigin(request.headers.origin)),
+      callback(
+        null,
+        isAllowedOrigin(request.headers.origin) ||
+          isSamePublicOriginRequest(request, publicOrigin),
+      ),
   });
   const registry = new RoomRegistry();
   const observability =
@@ -183,4 +189,14 @@ function normalizeOrigin(value) {
 function toWebSocketOrigin(origin) {
   const url = new URL(origin);
   return `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`;
+}
+
+function isSamePublicOriginRequest(request, publicOrigin) {
+  if (!publicOrigin || typeof request.headers.origin === "string") return false;
+  const forwardedHost = request.headers["x-forwarded-host"];
+  const host =
+    typeof forwardedHost === "string"
+      ? forwardedHost.split(",", 1)[0].trim()
+      : request.headers.host;
+  return host === new URL(publicOrigin).host;
 }
