@@ -69,5 +69,6 @@ export function connectTestSocket(url) {
     forceNew: true,
     reconnection: false,
     transports: ['websocket'],
+    extraHeaders: { Origin: 'http://localhost:5173' },
   })
 }

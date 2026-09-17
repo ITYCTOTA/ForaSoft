@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
+import { io as createSocket } from "socket.io-client";
 
-import { createApp, getRuntimeConfig } from "./app.js";
+import { createApp, createHttpServer, getRuntimeConfig } from "./app.js";
+
+async function listen(server) {
+  server.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
+  const address = server.address();
+  return `http://127.0.0.1:${address.port}`;
+}
+
+function connect(url, origin) {
+  return createSocket(url, {
+    forceNew: true,
+    reconnection: false,
+    timeout: 500,
+    transports: ["websocket"],
+    extraHeaders: { Origin: origin },
+  });
+}
 
 describe("HTTP composition root", () => {
   it("reads runtime settings", () => {
@@ -38,5 +56,79 @@ describe("HTTP composition root", () => {
     await new Promise((resolve, reject) =>
       listener.close((error) => (error ? reject(error) : resolve())),
     );
+  });
+
+  it("sets the production CSP and HSTS from a normalized PUBLIC_ORIGIN", async () => {
+    const { app } = createApp({
+      env: {
+        NODE_ENV: "production",
+        PUBLIC_ORIGIN: "https://video.example.test/some-path",
+      },
+      staticDir: "missing-dist",
+    });
+    const listener = app.listen(0);
+    await new Promise((resolve) => listener.once("listening", resolve));
+    const address = listener.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/healthz`);
+
+    expect(response.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; connect-src 'self' wss://video.example.test; media-src 'self' blob:; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    );
+    await new Promise((resolve, reject) =>
+      listener.close((error) => (error ? reject(error) : resolve())),
+    );
+  });
+
+  it("keeps localhost permissions explicit in development", async () => {
+    const { app } = createApp({ staticDir: "missing-dist" });
+    const listener = app.listen(0);
+    await new Promise((resolve) => listener.once("listening", resolve));
+    const address = listener.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/healthz`);
+
+    expect(response.headers.get("strict-transport-security")).toBeNull();
+    expect(response.headers.get("content-security-policy")).toContain(
+      "ws://localhost:5173 ws://127.0.0.1:5173 ws://localhost:4173 ws://127.0.0.1:4173",
+    );
+    await new Promise((resolve, reject) =>
+      listener.close((error) => (error ? reject(error) : resolve())),
+    );
+  });
+
+  it("rejects a disallowed Origin for polling and WebSocket handshakes", async () => {
+    const { httpServer, io } = createHttpServer({
+      env: {
+        NODE_ENV: "production",
+        PUBLIC_ORIGIN: "https://video.example.test",
+      },
+      staticDir: "missing-dist",
+    });
+    const url = await listen(httpServer);
+    const allowed = connect(url, "https://video.example.test");
+    const rejected = connect(url, "https://attacker.example.test");
+    const rejectedHandshake = new Promise((resolve, reject) => {
+      rejected.once("connect_error", resolve);
+      rejected.once("connect", () => reject(new Error("must not connect")));
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        allowed.once("connect", resolve);
+        allowed.once("connect_error", reject);
+      });
+      const polling = await fetch(`${url}/socket.io/?EIO=4&transport=polling`, {
+        headers: { Origin: "https://attacker.example.test" },
+      });
+      expect(polling.status).toBe(403);
+      await rejectedHandshake;
+      expect(allowed.connected).toBe(true);
+      expect(rejected.connected).toBe(false);
+    } finally {
+      allowed.disconnect();
+      rejected.disconnect();
+      await new Promise((resolve) => io.close(resolve));
+    }
   });
 });

@@ -13,6 +13,15 @@ const projectRoot = path.resolve(
   "../..",
 );
 
+const DEVELOPMENT_ORIGINS = Object.freeze([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+]);
+
 export function getRuntimeConfig(env = process.env) {
   return {
     nodeEnv: env.NODE_ENV ?? "development",
@@ -30,6 +39,7 @@ export function createApp({
   const config = getRuntimeConfig(env);
   const app = express();
   app.disable("x-powered-by");
+  app.use(createSecurityHeaders(config));
   app.use(express.json({ limit: "32kb" }));
   app.get("/healthz", (_request, response) =>
     response.status(200).json({ status: "ok" }),
@@ -51,18 +61,15 @@ export function createApp({
 export function createHttpServer(options = {}) {
   const { app, config } = createApp(options);
   const httpServer = createServer(app);
-  const allowedOrigins = new Set(
-    [
-      config.publicOrigin,
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ].filter(Boolean),
-  );
+  const allowedOrigins = getAllowedOrigins(config);
+  const isAllowedOrigin = (origin) =>
+    typeof origin === "string" && allowedOrigins.has(origin);
   const io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) =>
-        callback(null, !origin || allowedOrigins.has(origin)),
+      origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     },
+    allowRequest: (request, callback) =>
+      callback(null, isAllowedOrigin(request.headers.origin)),
   });
   const registry = new RoomRegistry();
   const gateway = new RoomGateway({ io, registry }).register();
@@ -77,4 +84,68 @@ export function startServer(options = {}) {
     );
   });
   return server;
+}
+
+function getAllowedOrigins(config) {
+  const origins = new Set();
+  const publicOrigin = normalizeOrigin(config.publicOrigin);
+  if (publicOrigin) origins.add(publicOrigin);
+  if (config.nodeEnv !== "production") {
+    for (const origin of DEVELOPMENT_ORIGINS) origins.add(origin);
+  }
+  return origins;
+}
+
+function createSecurityHeaders(config) {
+  const isProduction = config.nodeEnv === "production";
+  const publicOrigin = normalizeOrigin(config.publicOrigin);
+  const connectSources = ["'self'"];
+  if (isProduction && publicOrigin) {
+    connectSources.push(toWebSocketOrigin(publicOrigin));
+  }
+  if (!isProduction) {
+    connectSources.push(
+      "ws://localhost:5173",
+      "ws://127.0.0.1:5173",
+      "ws://localhost:4173",
+      "ws://127.0.0.1:4173",
+    );
+  }
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    `connect-src ${connectSources.join(" ")}`,
+    "media-src 'self' blob:",
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+
+  return (_request, response, next) => {
+    response.setHeader("Content-Security-Policy", contentSecurityPolicy);
+    if (isProduction) {
+      response.setHeader(
+        "Strict-Transport-Security",
+        "max-age=31536000; includeSubDomains",
+      );
+    }
+    next();
+  };
+}
+
+function normalizeOrigin(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function toWebSocketOrigin(origin) {
+  const url = new URL(origin);
+  return `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`;
 }
