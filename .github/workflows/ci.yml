@@ -38,8 +38,8 @@ jobs:
       - name: Browser smoke tests
         run: npm run test:browser
 
-      - name: Production build
-        run: npm run build
+      - name: Production build and one-port smoke test
+        run: npm run test:production-smoke
 
       - name: Upload verification artifacts
         if: always()

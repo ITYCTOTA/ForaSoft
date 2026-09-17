@@ -24,6 +24,7 @@
     "test:unit": "npm run test:unit --workspaces --if-present",
     "test:unit:coverage": "npm run test:unit:coverage --workspaces --if-present",
     "test:integration": "vitest run --config tests/vitest.integration.config.js",
+    "test:production-smoke": "npm run build && vitest run --config tests/vitest.integration.config.js --testNamePattern=\"serves the production SPA\"",
     "test:browser": "playwright test",
     "test:soak": "node --expose-gc scripts/run-socket-soak.mjs"
   },

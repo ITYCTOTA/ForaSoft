@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: video-chat-room
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_ORIGIN
+        fromService:
+          name: video-chat-room
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: STUN_URL
+        value: stun:stun.l.google.com:19302
+      - key: LOG_LEVEL
+        value: info

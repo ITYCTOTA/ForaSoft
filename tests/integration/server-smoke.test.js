@@ -1,4 +1,6 @@
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -32,6 +34,23 @@ describe('server composition root', () => {
     socket.disconnect()
     await disconnected
     expect(socket.connected).toBe(false)
+  })
+
+  const productionBundle = path.resolve('client/dist/index.html')
+  const productionSmoke = existsSync(productionBundle) ? it : it.skip
+  productionSmoke('serves the production SPA and Socket.io on one port', async () => {
+    const room = await fetch(`${testServer.url}/room/production-smoke`)
+    expect(room.status).toBe(200)
+    expect(room.headers.get('content-type')).toContain('text/html')
+    expect(await room.text()).toContain('<div id="root"></div>')
+
+    const socket = connectTestSocket(testServer.url)
+    try {
+      await once(socket, 'connect')
+      expect(socket.connected).toBe(true)
+    } finally {
+      socket.disconnect()
+    }
   })
 
   it('joins a room and returns a snapshot, then rejects the fifth participant', async () => {
