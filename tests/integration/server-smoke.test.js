@@ -14,7 +14,7 @@ describe('server composition root', () => {
   })
 
   afterAll(async () => {
-    await testServer.close()
+    await testServer?.close()
   })
 
   it('serves health from a free port', async () => {
@@ -56,9 +56,12 @@ describe('server composition root', () => {
   it('joins a room and returns a snapshot, then rejects the fifth participant', async () => {
     const sockets = Array.from({ length: 5 }, () => connectTestSocket(testServer.url))
     try {
-      const joins = await Promise.all(sockets.map((socket, index) => new Promise((resolve) => {
-        socket.emit('room:join', { roomId: 'integration-room', displayName: `User ${index}` }, resolve)
-      })))
+      const joins = []
+      for (const [index, socket] of sockets.entries()) {
+        joins.push(await new Promise((resolve) => {
+          socket.emit('room:join', { roomId: 'integration-room', displayName: `User ${index}` }, resolve)
+        }))
+      }
       expect(joins.slice(0, 4).every((result) => result.ok)).toBe(true)
       expect(joins[0].participants).toHaveLength(1)
       expect(joins[4]).toMatchObject({ ok: false, code: 'ROOM_FULL', message: 'Комната заполнена.' })

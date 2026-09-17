@@ -58,7 +58,7 @@ describe("real Socket.io room regressions", () => {
   });
 
   afterAll(async () => {
-    await testServer.close();
+    await testServer?.close();
   });
 
   it("atomically awards the final slot and permits duplicate display names in separate tabs", async () => {

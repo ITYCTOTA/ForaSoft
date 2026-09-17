@@ -1,12 +1,9 @@
 import { once } from 'node:events'
-import { spawn } from 'node:child_process'
 import net from 'node:net'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { io } from 'socket.io-client'
 
-const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
+import { createHttpServer } from '../../../server/src/app.js'
 
 export async function getFreePort() {
   const probe = net.createServer()
@@ -17,12 +14,12 @@ export async function getFreePort() {
   return port
 }
 
-async function waitForServer(url, processHandle) {
+async function waitForServer(url, httpServer) {
   const deadline = Date.now() + 10_000
 
   while (Date.now() < deadline) {
-    if (processHandle.exitCode !== null) {
-      throw new Error(`Test server exited with code ${processHandle.exitCode}`)
+    if (!httpServer.listening) {
+      throw new Error('Test server stopped before becoming healthy')
     }
 
     try {
@@ -42,23 +39,26 @@ async function waitForServer(url, processHandle) {
 
 export async function startTestServer() {
   const port = await getFreePort()
-  const server = spawn(process.execPath, ['server/src/index.js'], {
-    cwd: rootDirectory,
-    env: { ...process.env, PORT: String(port) },
-    stdio: 'ignore',
+  const application = createHttpServer({
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'development' },
   })
+  application.httpServer.listen(port, '127.0.0.1')
+  await once(application.httpServer, 'listening')
   const url = `http://127.0.0.1:${port}`
 
-  await waitForServer(url, server)
+  await waitForServer(url, application.httpServer)
 
   return {
-    server,
+    server: application.httpServer,
     url,
     async close() {
-      if (server.exitCode === null) {
-        server.kill()
-        await once(server, 'exit')
-      }
+      await application.shutdown()
+      if (application.httpServer.listening)
+        await new Promise((resolve, reject) =>
+          application.httpServer.close((error) =>
+            error ? reject(error) : resolve(),
+          ),
+        )
     },
   }
 }
