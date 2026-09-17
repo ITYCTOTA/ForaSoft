@@ -46,7 +46,7 @@ export async function startTestServer() {
   await once(application.httpServer, 'listening')
   const url = `http://127.0.0.1:${port}`
 
-  await waitForServer(url, application.httpServer)
+  await waitForServer(`${url}/healthz`, application.httpServer)
 
   return {
     server: application.httpServer,
