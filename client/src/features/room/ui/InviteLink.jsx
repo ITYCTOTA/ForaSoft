@@ -17,5 +17,12 @@ export default function InviteLink() {
       setCopied(true); setError('')
     } catch { setError('Не удалось скопировать ссылку. Скопируйте её вручную.') }
   }
-  return <><p className="invite-url">{inviteUrl}</p><button type="button" onClick={copy}>Скопировать ссылку</button>{copied && <span role="status">Ссылка скопирована.</span>}{error && <span role="alert">{error}</span>}</>
+  return (
+    <div className="invite-link">
+      <p className="invite-url" title={inviteUrl}>{inviteUrl}</p>
+      <button type="button" onClick={copy}>Скопировать ссылку</button>
+      {copied && <span role="status">Ссылка скопирована.</span>}
+      {error && <span role="alert">{error}</span>}
+    </div>
+  )
 }

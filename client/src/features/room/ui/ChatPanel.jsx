@@ -1,7 +1,7 @@
 import { formatMessageTime } from "../model/messages.js";
 export default function ChatPanel({ messages, value, onChange, onSubmit }) {
   return (
-    <section aria-label="Чат">
+    <section aria-label="Чат" className="chat-panel">
       <h2>Чат</h2>
       <ul className="messages">
         {messages.map((message) => (

@@ -84,7 +84,10 @@ describe("NegotiationController", () => {
   it("buffers ICE before SDP and clears it when peer leaves", async () => {
     const { controller, peers } = setup();
     controller.start({ self: { id: "a" }, participants: [] });
-    await controller.handleIce({ fromId: "b", candidate: { candidate: "early" } });
+    await controller.handleIce({
+      fromId: "b",
+      candidate: { candidate: "early" },
+    });
     expect(peers.get("b").connection.candidates).toEqual([]);
     await controller.handleAnswer({
       fromId: "b",
@@ -93,7 +96,10 @@ describe("NegotiationController", () => {
     expect(peers.get("b").connection.candidates).toEqual([
       { candidate: "early" },
     ]);
-    await controller.handleIce({ fromId: "c", candidate: { candidate: "drop" } });
+    await controller.handleIce({
+      fromId: "c",
+      candidate: { candidate: "drop" },
+    });
     controller.removePeer("c");
     expect(controller.pendingCandidates.has("c")).toBe(false);
   });

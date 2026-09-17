@@ -6,4 +6,13 @@ export default defineConfig({
   build: {
     target: 'es2022',
   },
+  server: {
+    proxy: {
+      '/socket.io': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
 })

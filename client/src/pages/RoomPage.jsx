@@ -25,12 +25,16 @@ import MediaControls from "../features/room/ui/MediaControls.jsx";
 export default function RoomPage({ roomId, initialName = "" }) {
   const [name, setName] = useState(initialName);
   const [error, setError] = useState("");
-  const [sessionState, setSessionState] = useState({ status: "idle" });
+  const [sessionPhase, setSessionPhase] = useState("idle");
+  const [connectionError, setConnectionError] = useState("");
   const [messageText, setMessageText] = useState("");
   const [peerFailures, setPeerFailures] = useState({});
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
-  const [mediaState, setMediaState] = useState({ audioEnabled: false, videoEnabled: false });
+  const [mediaState, setMediaState] = useState({
+    audioEnabled: false,
+    videoEnabled: false,
+  });
   const [participants, dispatchParticipants] = useReducer(
     participantsReducer,
     initialParticipantsState,
@@ -44,7 +48,8 @@ export default function RoomPage({ roomId, initialName = "" }) {
   const peerManagerRef = useRef(null);
   const negotiationRef = useRef(null);
   useEffect(() => {
-    const leaveOnPageHide = () => void sessionRef.current?.leave({ waitForAck: false });
+    const leaveOnPageHide = () =>
+      void sessionRef.current?.leave({ waitForAck: false });
     window.addEventListener("pagehide", leaveOnPageHide);
     return () => {
       window.removeEventListener("pagehide", leaveOnPageHide);
@@ -52,7 +57,20 @@ export default function RoomPage({ roomId, initialName = "" }) {
     };
   }, []);
   const handleState = (state) => {
-    setSessionState(state);
+    if (
+      [
+        "joining",
+        "joined",
+        "leaving",
+        "idle",
+        "disconnected",
+        "error",
+      ].includes(state.status)
+    ) {
+      setSessionPhase(state.status);
+    }
+    if (state.status === "disconnected" || state.status === "error")
+      setConnectionError(state.error ?? "");
     if (state.status === "error") {
       mediaRef.current?.stop();
       peerManagerRef.current?.closeAll();
@@ -74,8 +92,14 @@ export default function RoomPage({ roomId, initialName = "" }) {
       });
       dispatchMessages({ type: "snapshot", messages: state.messages });
       void sessionRef.current?.sendMediaState({
-        audioEnabled: mediaRef.current?.stream.getAudioTracks().some((track) => track.enabled) ?? false,
-        videoEnabled: mediaRef.current?.stream.getVideoTracks().some((track) => track.enabled) ?? false,
+        audioEnabled:
+          mediaRef.current?.stream
+            .getAudioTracks()
+            .some((track) => track.enabled) ?? false,
+        videoEnabled:
+          mediaRef.current?.stream
+            .getVideoTracks()
+            .some((track) => track.enabled) ?? false,
       });
       if (globalThis.RTCPeerConnection) {
         peerManagerRef.current = new PeerConnectionManager({
@@ -145,10 +169,11 @@ export default function RoomPage({ roomId, initialName = "" }) {
     if (next.error) setError(next.error);
   };
   const join = async () => {
-    if (sessionState.status === "joining") return;
+    if (sessionPhase === "joining") return;
     const result = validateDisplayName(name);
     if (!result.ok) return setError(result.message);
-    setSessionState({ status: "joining" });
+    setSessionPhase("joining");
+    setConnectionError("");
     if (!mediaRef.current)
       mediaRef.current = new MediaController({
         onStateChange: (next) => void applyMediaState(next),
@@ -188,6 +213,65 @@ export default function RoomPage({ roomId, initialName = "" }) {
     await sessionRef.current?.leave();
   };
   const visibleMessages = messagesList(messages);
+  const isInRoom = sessionPhase === "joined" || sessionPhase === "leaving";
+
+  if (isInRoom) {
+    return (
+      <main className="room-page">
+        <header className="room-header">
+          <h1>Комната</h1>
+          <InviteLink />
+          <div className="room-session-actions">
+            <span role="status">Вы вошли в комнату.</span>
+            <button
+              type="button"
+              onClick={leaveRoom}
+              disabled={sessionPhase === "leaving"}
+            >
+              {sessionPhase === "leaving" ? "Выход..." : "Выйти"}
+            </button>
+          </div>
+        </header>
+
+        <div className="room-workspace">
+          <section className="conference-stage" aria-label="Видеозвонок">
+            <VideoGrid
+              participants={participantsList(participants)}
+              selfId={participants.selfId}
+              localStream={localStream}
+              remoteStreams={remoteStreams}
+            />
+            <MediaControls
+              audioEnabled={mediaState.audioEnabled}
+              hasAudio={mediaRef.current?.stream.getAudioTracks().length > 0}
+              videoEnabled={mediaState.videoEnabled}
+              onToggleAudio={toggleMicrophone}
+              onToggleVideo={toggleCamera}
+            />
+            {Object.entries(peerFailures).map(([participantId, message]) => (
+              <p key={participantId} role="alert" className="peer-failure">
+                {participants.byId[participantId]?.displayName ?? "Участник"}:{" "}
+                {message}
+              </p>
+            ))}
+          </section>
+
+          <aside className="room-sidebar">
+            <ParticipantList participants={participantsList(participants)} />
+            <ChatPanel
+              messages={visibleMessages}
+              value={messageText}
+              onChange={setMessageText}
+              onSubmit={sendMessage}
+            />
+          </aside>
+        </div>
+
+        <small className="room-id">Идентификатор комнаты: {roomId}</small>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell card">
       <h1>Комната</h1>
@@ -198,48 +282,15 @@ export default function RoomPage({ roomId, initialName = "" }) {
           setName(value);
           setError("");
         }}
-        error={error}
+        error={error || connectionError}
       />
-      <button type="button" onClick={join} disabled={sessionState.status === "joining"}>
-        {sessionState.status === "joining" ? "Подключение..." : "Войти"}
+      <button
+        type="button"
+        onClick={join}
+        disabled={sessionPhase === "joining"}
+      >
+        {sessionPhase === "joining" ? "Подключение..." : "Войти"}
       </button>
-      {sessionState.status === "joined" && (
-        <span role="status">Вы вошли в комнату.</span>
-      )}
-      {sessionState.status === "joined" && <button type="button" onClick={leaveRoom}>Выйти</button>}
-      {sessionState.status === "disconnected" && (
-        <span role="alert">{sessionState.error}</span>
-      )}
-      <ParticipantList participants={participantsList(participants)} />
-      <VideoGrid
-        participants={participantsList(participants)}
-        selfId={participants.selfId}
-        localStream={localStream}
-        remoteStreams={remoteStreams}
-      />
-      {sessionState.status === "joined" && (
-        <MediaControls
-          audioEnabled={mediaState.audioEnabled}
-          hasAudio={mediaRef.current?.stream.getAudioTracks().length > 0}
-          videoEnabled={mediaState.videoEnabled}
-          onToggleAudio={toggleMicrophone}
-          onToggleVideo={toggleCamera}
-        />
-      )}
-      {Object.entries(peerFailures).map(([participantId, message]) => (
-        <p key={participantId} role="alert">
-          {participants.byId[participantId]?.displayName ?? "Участник"}:{" "}
-          {message}
-        </p>
-      ))}
-      {visibleMessages.length > 0 && (
-        <ChatPanel
-          messages={visibleMessages}
-          value={messageText}
-          onChange={setMessageText}
-          onSubmit={sendMessage}
-        />
-      )}
       <small>Идентификатор комнаты: {roomId}</small>
     </main>
   );
