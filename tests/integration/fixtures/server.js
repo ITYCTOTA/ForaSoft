@@ -49,6 +49,7 @@ export async function startTestServer() {
   await waitForServer(`${url}/healthz`, application.httpServer)
 
   return {
+    application,
     server: application.httpServer,
     url,
     async close() {

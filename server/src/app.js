@@ -4,6 +4,7 @@ import path from "node:path";
 
 import express from "express";
 import { Server } from "socket.io";
+import { LIMITS } from "@video-chat-room/shared";
 
 import { ServerObservability } from "./observability.js";
 import { RoomGateway } from "./socket/roomGateway.js";
@@ -76,6 +77,7 @@ export function createHttpServer(options = {}) {
       ? allowedOrigins.has(origin)
       : config.nodeEnv !== "production";
   const io = new Server(httpServer, {
+    maxHttpBufferSize: LIMITS.MAX_SOCKET_HTTP_BUFFER_BYTES,
     cors: {
       origin: (origin, callback) =>
         callback(null, typeof origin !== "string" || isAllowedOrigin(origin)),

@@ -1,5 +1,6 @@
 import {
   ERROR_CODES,
+  LIMITS,
   SOCKET_EVENTS,
   UI_MESSAGES,
   serializeRoom,
@@ -278,7 +279,8 @@ function isSessionDescription(value, expectedType) {
     !Array.isArray(value) &&
     value.type === expectedType &&
     typeof value.sdp === "string" &&
-    value.sdp.length > 0
+    value.sdp.length > 0 &&
+    Buffer.byteLength(value.sdp, "utf8") <= LIMITS.MAX_SDP_BYTES
   );
 }
 
@@ -287,6 +289,8 @@ function isIceCandidate(value) {
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    typeof value.candidate === "string"
+    typeof value.candidate === "string" &&
+    Buffer.byteLength(JSON.stringify(value), "utf8") <=
+      LIMITS.MAX_ICE_CANDIDATE_BYTES
   );
 }

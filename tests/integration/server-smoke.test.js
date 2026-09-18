@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { LIMITS } from '@video-chat-room/shared'
 
 import { connectTestSocket, startTestServer } from './fixtures/server.js'
 
@@ -22,6 +23,12 @@ describe('server composition root', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ status: 'ok' })
+  })
+
+  it('limits the Socket.io transport buffer', () => {
+    expect(testServer.application.io.opts.maxHttpBufferSize).toBe(
+      LIMITS.MAX_SOCKET_HTTP_BUFFER_BYTES,
+    )
   })
 
   it('accepts and closes a Socket.io connection', async () => {
@@ -131,6 +138,18 @@ describe('server composition root', () => {
       await expect(offer).resolves.toEqual({ fromId: senderJoin.self.id, sdp: { type: 'offer', sdp: 'v=0' } })
       const invalid = await new Promise((resolve) => sender.emit('signal:answer', { targetId: 'unknown', sdp: answer }, resolve))
       expect(invalid.code).toBe('INVALID_SIGNAL_TARGET')
+
+      const oversizedSdp = await new Promise((resolve) => sender.emit('signal:offer', {
+        targetId: targetJoin.self.id,
+        sdp: { type: 'offer', sdp: 'v=0\r\n' + 'a'.repeat(LIMITS.MAX_SDP_BYTES) },
+      }, resolve))
+      expect(oversizedSdp.code).toBe('INVALID_SIGNAL_TARGET')
+
+      const oversizedIce = await new Promise((resolve) => sender.emit('signal:ice', {
+        targetId: targetJoin.self.id,
+        candidate: { candidate: 'candidate:' + 'a'.repeat(LIMITS.MAX_ICE_CANDIDATE_BYTES) },
+      }, resolve))
+      expect(oversizedIce.code).toBe('INVALID_SIGNAL_TARGET')
     } finally {
       sender.disconnect()
       target.disconnect()

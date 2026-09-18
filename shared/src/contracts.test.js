@@ -40,6 +40,9 @@ describe('shared contracts', () => {
   it('publishes stable protocol constants', () => {
     expect(LIMITS.MAX_PARTICIPANTS).toBe(4)
     expect(LIMITS.MAX_HISTORY_MESSAGES).toBe(500)
+    expect(LIMITS.MAX_SOCKET_HTTP_BUFFER_BYTES).toBe(256 * 1024)
+    expect(LIMITS.MAX_SDP_BYTES).toBe(128 * 1024)
+    expect(LIMITS.MAX_ICE_CANDIDATE_BYTES).toBe(8 * 1024)
     expect(SOCKET_EVENTS.ROOM_JOIN).toBe('room:join')
     expect(SOCKET_EVENTS.SIGNAL_ICE).toBe('signal:ice')
     expect(ERROR_CODES.ROOM_FULL).toBe('ROOM_FULL')
