@@ -169,7 +169,7 @@ test("reload forgets the room session and renders user text safely", async ({ br
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByRole("status")).toBeVisible();
     await page.getByPlaceholder("Сообщение").fill("<img src=x onerror=alert(1)>");
-    await page.getByRole("button", { name: "Отправить" }).click();
+    await page.getByPlaceholder("Сообщение").press("Enter");
     await expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible();
     await expect(page.locator(".chat-panel img")).toHaveCount(0);
 
