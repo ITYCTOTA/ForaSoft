@@ -1,9 +1,16 @@
+import { useEffect, useRef } from "react";
 import { formatMessageTime } from "../model/messages.js";
 export default function ChatPanel({ messages, value, onChange, onSubmit }) {
+  const messagesRef = useRef(null);
+  useEffect(() => {
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [messages.length]);
+
   return (
     <section aria-label="Чат" className="chat-panel">
       <h2>Чат</h2>
-      <ul className="messages">
+      <ul ref={messagesRef} className="messages">
         {messages.map((message) => (
           <li key={message.id}>
             <small>{formatMessageTime(message.createdAt)}</small>{" "}
