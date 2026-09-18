@@ -8,6 +8,7 @@ function fakeSocket() {
     connected: false,
     connectCalls: 0,
     on(event, handler) { handlers.set(event, handler) },
+    off(event) { handlers.delete(`once:${event}`) },
     once(event, handler) { handlers.set(`once:${event}`, handler) },
     emit(event, payload, ack) { this.last = { event, payload, ack } },
     connect() { this.connectCalls += 1; this.connected = true; handlers.get('once:connect')?.() },
@@ -36,6 +37,20 @@ describe('RoomSession', () => {
     socket.last.ack({ ok: false, code: 'ROOM_FULL', message: 'Комната заполнена.' })
     await expect(joining).resolves.toMatchObject({ code: 'ROOM_FULL' })
     expect(states.at(-1)).toMatchObject({ status: 'error', code: 'ROOM_FULL' })
+  })
+
+  it('settles a pending join when leave cancels the attempt', async () => {
+    const socket = fakeSocket(); const states = []
+    const session = new RoomSession({ socketFactory: () => socket, onState: (state) => states.push(state) })
+    const joining = session.join({ roomId: 'room', displayName: 'Анна' })
+    const joinAck = socket.last.ack
+
+    await session.leave({ waitForAck: false })
+    await expect(joining).resolves.toEqual({ ok: false, code: 'JOIN_CANCELLED' })
+    joinAck({ ok: true, self: { id: 'p' }, participants: [], messages: [] })
+
+    expect(states.some((state) => state.status === 'joined')).toBe(false)
+    expect(states.at(-1)).toMatchObject({ status: 'idle' })
   })
 
   it('sends only explicit media state payload', async () => {

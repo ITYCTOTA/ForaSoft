@@ -17,6 +17,7 @@ export class RoomSession {
     this.suppressDisconnect = false;
     this.leaving = false;
     this.cleaned = false;
+    this.pendingJoin = null;
     this.cleanupCallbacks = new Set();
   }
 
@@ -26,14 +27,25 @@ export class RoomSession {
   }
 
   join({ roomId, displayName }) {
+    this.#cancelPendingJoin();
     const attempt = ++this.attempt;
     this.suppressDisconnect = false;
     this.#subscribe();
     return new Promise((resolve) => {
       let timer;
-      const finish = (result) => {
-        if (attempt !== this.attempt) return;
+      let complete = false;
+      const cleanup = () => {
         clearTimeout(timer);
+        this.socket.off?.("connect", onConnect);
+        this.socket.off?.("connect_error", onConnectError);
+        if (this.pendingJoin?.attempt === attempt) this.pendingJoin = null;
+      };
+      const finish = (result) => {
+        if (complete) return;
+        complete = true;
+        cleanup();
+        if (attempt !== this.attempt || this.cleaned)
+          return resolve({ ok: false, code: "JOIN_CANCELLED" });
         if (!result.ok) {
           this.suppressDisconnect = true;
           this.socket.disconnect();
@@ -45,16 +57,23 @@ export class RoomSession {
         } else this.onState({ status: "joined", ...result });
         resolve(result);
       };
-      this.socket.once("connect", () =>
-        this.socket.emit("room:join", { roomId, displayName }, finish),
-      );
-      this.socket.once("connect_error", () =>
+      const cancel = () => {
+        if (complete) return;
+        complete = true;
+        cleanup();
+        resolve({ ok: false, code: "JOIN_CANCELLED" });
+      };
+      const onConnect = () =>
+        this.socket.emit("room:join", { roomId, displayName }, finish);
+      const onConnectError = () =>
         finish({
           ok: false,
           code: "SERVER_UNAVAILABLE",
           message: UI_MESSAGES.SERVER_DISCONNECTED,
-        }),
-      );
+        });
+      this.pendingJoin = { attempt, cancel };
+      this.socket.once("connect", onConnect);
+      this.socket.once("connect_error", onConnectError);
       timer = setTimeout(
         () =>
           finish({
@@ -72,6 +91,7 @@ export class RoomSession {
     if (this.leaving || this.cleaned) return;
     this.leaving = true;
     this.attempt += 1;
+    this.#cancelPendingJoin();
     this.onState({ status: "leaving" });
     if (this.socket.connected && waitForAck) {
       await new Promise((resolve) => {
@@ -124,6 +144,7 @@ export class RoomSession {
 
   #finalize(state) {
     if (this.cleaned) return;
+    this.#cancelPendingJoin();
     this.cleaned = true;
     for (const cleanup of this.cleanupCallbacks) cleanup();
     this.onState(state);
@@ -168,6 +189,10 @@ export class RoomSession {
     this.socket.on("signal:ice", (signal) =>
       this.#event({ status: "signal-ice", ...signal }),
     );
+  }
+
+  #cancelPendingJoin() {
+    this.pendingJoin?.cancel();
   }
 }
 
