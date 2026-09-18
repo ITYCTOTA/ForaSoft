@@ -61,6 +61,17 @@ export function useRoomCall({ roomId, initialName = "", onLeave }) {
     });
     if (next.error) setError(next.error);
   };
+  const disposeCallResources = () => {
+    peerManagerRef.current?.closeAll();
+    mediaRef.current?.stop();
+    sessionRef.current = null;
+    mediaRef.current = null;
+    peerManagerRef.current = null;
+    negotiationRef.current = null;
+    setLocalStream(null);
+    setRemoteStreams({});
+    setMediaState({ audioEnabled: false, videoEnabled: false });
+  };
   const handleState = (state) => {
     if (
       [
@@ -77,14 +88,12 @@ export function useRoomCall({ roomId, initialName = "", onLeave }) {
       setConnectionError(state.error ?? "");
     if (state.status === "error") {
       setConnectionErrorCode(state.code ?? "");
-      mediaRef.current?.stop();
-      peerManagerRef.current?.closeAll();
-      setLocalStream(null);
-      setRemoteStreams({});
-      setMediaState({ audioEnabled: false, videoEnabled: false });
-      sessionRef.current = null;
+      disposeCallResources();
     }
-    if (state.status === "idle" || state.status === "disconnected") {
+    if (state.status === "disconnected") {
+      disposeCallResources();
+    }
+    if (state.status === "idle") {
       setLocalStream(null);
       setRemoteStreams({});
       setMediaState({ audioEnabled: false, videoEnabled: false });

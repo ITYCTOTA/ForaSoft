@@ -126,7 +126,7 @@ test("server failure is final until the user explicitly tries to enter again", a
   }
 });
 
-test("network loss releases the local room and does not rejoin when connectivity returns", async ({
+test("network loss releases the local room, does not silently rejoin, and permits explicit re-entry", async ({
   browser,
 }) => {
   test.setTimeout(30_000);
@@ -150,6 +150,10 @@ test("network loss releases the local room and does not rejoin when connectivity
     await second.waitForTimeout(750);
     await expect(second.getByRole("status")).toHaveCount(0);
     await expect(first.getByRole("status")).toContainText("Вы вошли в комнату.");
+
+    await second.getByRole("button", { name: "Войти" }).click();
+    await expect(second.getByRole("status")).toContainText("Вы вошли в комнату.");
+    await expect(first.locator(".video-tile")).toHaveCount(2);
   } finally {
     await Promise.all([firstContext.close(), secondContext.close()]);
   }

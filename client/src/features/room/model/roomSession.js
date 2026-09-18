@@ -6,10 +6,12 @@ export class RoomSession {
     socketFactory = io,
     onState = () => {},
     leaveAckTimeoutMs = 2_000,
+    ackTimeoutMs = 2_000,
   } = {}) {
     this.socket = socketFactory({ autoConnect: false, reconnection: false });
     this.onState = onState;
     this.leaveAckTimeoutMs = leaveAckTimeoutMs;
+    this.ackTimeoutMs = ackTimeoutMs;
     this.attempt = 0;
     this.bound = false;
     this.suppressDisconnect = false;
@@ -89,17 +91,35 @@ export class RoomSession {
   }
 
   sendChat(text) {
-    return new Promise((resolve) =>
-      this.socket.emit("chat:send", { text }, resolve),
-    );
+    return this.#emitWithAck("chat:send", { text });
   }
   sendMediaState(state) {
-    return new Promise((resolve) =>
-      this.socket.emit("media:state", state, resolve),
-    );
+    return this.#emitWithAck("media:state", state);
   }
   sendSignal(event, payload) {
-    return new Promise((resolve) => this.socket.emit(event, payload, resolve));
+    return this.#emitWithAck(event, payload);
+  }
+
+  #emitWithAck(event, payload) {
+    return new Promise((resolve) => {
+      let complete = false;
+      const finish = (result) => {
+        if (complete) return;
+        complete = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+      const timer = setTimeout(
+        () =>
+          finish({
+            ok: false,
+            code: "SERVER_UNAVAILABLE",
+            message: UI_MESSAGES.SERVER_DISCONNECTED,
+          }),
+        this.ackTimeoutMs,
+      );
+      this.socket.emit(event, payload, finish);
+    });
   }
 
   #finalize(state) {

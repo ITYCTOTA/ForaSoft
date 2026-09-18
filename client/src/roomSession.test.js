@@ -44,6 +44,27 @@ describe('RoomSession', () => {
     expect(socket.last).toMatchObject({ event: 'media:state', payload: { audioEnabled: false, videoEnabled: true } })
     socket.last.ack({ ok: true }); await expect(sent).resolves.toEqual({ ok: true })
   })
+  it.each([
+    ['sendChat', ['Привет'], 'chat:send'],
+    ['sendMediaState', [{ audioEnabled: true, videoEnabled: false }], 'media:state'],
+    ['sendSignal', ['signal:ice', { targetId: 'peer', candidate: {} }], 'signal:ice'],
+  ])('resolves %s when its acknowledgement times out', async (method, args, event) => {
+    vi.useFakeTimers()
+    try {
+      const socket = fakeSocket()
+      const session = new RoomSession({ socketFactory: () => socket, ackTimeoutMs: 10 })
+      const pending = session[method](...args)
+      expect(socket.last.event).toBe(event)
+      await vi.advanceTimersByTimeAsync(10)
+      await expect(pending).resolves.toEqual({
+        ok: false,
+        code: 'SERVER_UNAVAILABLE',
+        message: 'Соединение с сервером потеряно. Войдите снова.',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('cleans up once on expected leave without disconnect error', async () => {
     const socket = fakeSocket(); const states = []; const cleanup = vi.fn(); const session = new RoomSession({ socketFactory: () => socket, onState: (state) => states.push(state) })
     const joining = session.join({ roomId: 'room', displayName: 'Анна' }); socket.last.ack({ ok: true, self: { id: 'p' }, participants: [], messages: [] }); await joining
