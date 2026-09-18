@@ -90,14 +90,8 @@ export function useRoomCall({ roomId, initialName = "", onLeave }) {
       setConnectionErrorCode(state.code ?? "");
       disposeCallResources();
     }
-    if (state.status === "disconnected") {
+    if (state.status === "idle" || state.status === "disconnected")
       disposeCallResources();
-    }
-    if (state.status === "idle") {
-      setLocalStream(null);
-      setRemoteStreams({});
-      setMediaState({ audioEnabled: false, videoEnabled: false });
-    }
     if (state.status === "joined") {
       dispatchParticipants({
         type: "snapshot",
